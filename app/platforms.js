@@ -70,6 +70,15 @@ function withPoints(baseMessage, points) {
   return points === null || points === 0 ? baseMessage : `${baseMessage}，获得 ${points} 积分`;
 }
 
+/** 生成 UUID（用于 ZCode x-request-id） */
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 /** 解析适配器返回的响应体，尽量兼容常见 JSON 返回结构 */
 function parseCommonBody(status, body) {
   if (status === 401 || status === 403) {
@@ -127,37 +136,145 @@ const REGISTRY = {
     name: 'Trae',
     desc: 'Trae AI IDE（字节跳动）',
     fields: [
-      { key: 'cookie', label: 'Cookie', type: 'textarea', required: true, placeholder: '登录 trae.cn 后，从浏览器开发者工具复制完整 Cookie' },
-      { key: 'token', label: 'API Token（可选）', type: 'text', required: false, placeholder: 'Bearer Token，如平台需要' },
-      { key: 'checkin_url', label: '签到接口地址（可选）', type: 'text', required: false, placeholder: '留空使用内置默认；官方接口变动时可在此覆盖' }
+      { key: 'token', label: 'JWT Token', type: 'textarea', required: true, placeholder: '从 Trae 客户端提取的 Cloud-IDE-JWT Token' },
+      { key: 'device_id', label: '设备 ID（可选）', type: 'text', required: false, placeholder: '设备 ID，部分接口可能需要' },
+      { key: 'region', label: '用户区域（可选）', type: 'text', required: false, placeholder: '如 CN，部分接口可能需要' }
     ],
-    defaultUrl: 'https://trae.cn/api/user/checkin',
+    defaultUrl: 'https://api.trae.cn/trae/api/v2/ug/checkin_credits/claim',
+    statusUrl: 'https://api.trae.cn/trae/api/v2/ug/checkin_credits/status',
     buildRequest(cred) {
       const headers = { 'User-Agent': UA, 'Content-Type': 'application/json' };
-      if (cred.cookie) headers['Cookie'] = cred.cookie;
-      if (cred.token) headers['Authorization'] = `Bearer ${cred.token}`;
-      return { url: cred.checkin_url || this.defaultUrl, method: 'POST', headers, body: '{}' };
+      if (cred.token) headers['Authorization'] = `Cloud-IDE-JWT ${cred.token}`;
+      if (cred.device_id) headers['x-device-id'] = cred.device_id;
+      if (cred.region) headers['X-User-Region'] = cred.region;
+      return { url: this.defaultUrl, method: 'POST', headers, body: '{"req_source":1}' };
     },
-    parseResponse: (status, body) => parseCommonBody(status, body)
+    buildStatusRequest(cred) {
+      const headers = { 'User-Agent': UA, 'Content-Type': 'application/json' };
+      if (cred.token) headers['Authorization'] = `Cloud-IDE-JWT ${cred.token}`;
+      if (cred.device_id) headers['x-device-id'] = cred.device_id;
+      if (cred.region) headers['X-User-Region'] = cred.region;
+      return { url: this.statusUrl, method: 'POST', headers, body: '{}' };
+    },
+    parseResponse: (status, body) => {
+      if (status === 401 || status === 403) {
+        return { success: false, authExpired: true, message: `授权已失效(HTTP ${status})，请重新登录授权` };
+      }
+      let json = null;
+      try { json = JSON.parse(body); } catch (e) { /* 非 JSON */ }
+      if (json && typeof json === 'object') {
+        const code = json.code;
+        const checkedIn = json.checked_in === true || json.checked_in === 'true';
+        const credits = toNumber(json.credits) || toNumber(json.data?.credits) || 0;
+        const extraCredits = toNumber(json.extra_credits) || toNumber(json.data?.extra_credits) || 0;
+        const points = credits + extraCredits;
+        
+        if (code === 0 || checkedIn) {
+          return { success: true, points, message: withPoints('签到成功', points) };
+        }
+        if (code === 9095) {
+          return { success: false, message: '本设备今日已有账号签到' };
+        }
+        const msg = json.message || json.msg || '';
+        return { success: false, message: msg || `签到失败(code=${code})` };
+      }
+      return { success: false, message: `签到失败：HTTP ${status}` };
+    },
+    parseStatusResponse: (status, body) => {
+      if (status !== 200) return { checked: null, error: `HTTP ${status}` };
+      let json = null;
+      try { json = JSON.parse(body); } catch (e) { return { checked: null, error: '非 JSON 响应' }; }
+      const checked = json.checked_in === true || json.checked_in === 'true';
+      return {
+        checked,
+        credits: toNumber(json.credits) || 0,
+        extraCredits: toNumber(json.extra_credits) || 0,
+        enable: json.enable === true,
+        raw: json
+      };
+    }
   },
 
   workbuddy: {
     id: 'workbuddy',
     name: 'WorkBuddy',
-    desc: 'WorkBuddy AI 工作台',
+    desc: '腾讯 WorkBuddy AI 编程助手（桌面端）',
     fields: [
-      { key: 'cookie', label: 'Cookie', type: 'textarea', required: true, placeholder: '登录后从浏览器开发者工具复制完整 Cookie' },
-      { key: 'token', label: 'API Token（可选）', type: 'text', required: false, placeholder: 'Bearer Token，如平台需要' },
-      { key: 'checkin_url', label: '签到接口地址（可选）', type: 'text', required: false, placeholder: '留空使用内置默认；官方接口变动时可在此覆盖' }
+      { key: 'access_token', label: 'Access Token', type: 'password', required: true, placeholder: '从 WorkBuddy 桌面端获取的 accessToken（Bearer Token）' },
+      { key: 'uid', label: '用户 ID（可选）', type: 'text', required: false, placeholder: '用户 ID，部分接口可能需要' },
+      { key: 'domain', label: '域名（可选）', type: 'select', required: false, options: ['https://www.workbuddy.cn', 'https://www.codebuddy.cn'], placeholder: '默认 https://www.workbuddy.cn' }
     ],
-    defaultUrl: 'https://workbuddy.cn/api/checkin',
+    defaultUrl: 'https://www.workbuddy.cn/v2/billing/meter/daily-checkin',
+    statusUrl: 'https://www.workbuddy.cn/v2/billing/meter/checkin-activity-status',
+    domains: ['https://www.workbuddy.cn', 'https://www.codebuddy.cn'],
     buildRequest(cred) {
-      const headers = { 'User-Agent': UA, 'Content-Type': 'application/json' };
-      if (cred.cookie) headers['Cookie'] = cred.cookie;
-      if (cred.token) headers['Authorization'] = `Bearer ${cred.token}`;
-      return { url: cred.checkin_url || this.defaultUrl, method: 'POST', headers, body: '{}' };
+      const domain = cred.domain || this.domains[0];
+      const headers = {
+        'User-Agent': UA,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Domain': domain.replace('https://', '')
+      };
+      if (cred.access_token) headers['Authorization'] = `Bearer ${cred.access_token}`;
+      if (cred.uid) headers['X-User-Id'] = cred.uid;
+      return {
+        url: domain + '/v2/billing/meter/daily-checkin',
+        method: 'POST',
+        headers,
+        body: '{}'
+      };
     },
-    parseResponse: (status, body) => parseCommonBody(status, body)
+    buildStatusRequest(cred) {
+      const domain = cred.domain || this.domains[0];
+      const headers = {
+        'User-Agent': UA,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Domain': domain.replace('https://', '')
+      };
+      if (cred.access_token) headers['Authorization'] = `Bearer ${cred.access_token}`;
+      if (cred.uid) headers['X-User-Id'] = cred.uid;
+      return {
+        url: domain + '/v2/billing/meter/checkin-activity-status',
+        method: 'POST',
+        headers,
+        body: '{}'
+      };
+    },
+    parseResponse: (status, body) => {
+      if (status === 401 || status === 403) {
+        return { success: false, authExpired: true, message: `授权已失效(HTTP ${status})，请重新登录授权` };
+      }
+      let json = null;
+      try { json = JSON.parse(body); } catch (e) { /* 非 JSON */ }
+      if (json && typeof json === 'object') {
+        const code = json.code;
+        const msg = json.message || json.msg || '';
+        const data = json.data || {};
+        const credit = toNumber(data.credit) || toNumber(data.todayCredit) || toNumber(data.today_credit) || 0;
+        
+        if (code === 0 || code === 10001 || msg.includes('已签到')) {
+          return { success: true, points: credit, message: withPoints('签到成功', credit) };
+        }
+        if (code === 41000) {
+          return { success: false, message: '签到活动未开始或已结束' };
+        }
+        return { success: false, message: msg || `签到失败(code=${code})` };
+      }
+      return { success: false, message: `签到失败：HTTP ${status}` };
+    },
+    parseStatusResponse: (status, body) => {
+      if (status !== 200) return { checked: null, error: `HTTP ${status}` };
+      let json = null;
+      try { json = JSON.parse(body); } catch (e) { return { checked: null, error: '非 JSON 响应' }; }
+      const data = json.data || json;
+      const checked = data.todayCheckedIn === true || data.today_checked_in === true;
+      return {
+        checked,
+        todayCredit: toNumber(data.todayCredit) || toNumber(data.today_credit) || 0,
+        raw: data
+      };
+    }
   },
 
   codebuddy: {
@@ -165,18 +282,280 @@ const REGISTRY = {
     name: 'CodeBuddy',
     desc: '腾讯云 CodeBuddy AI 编程助手',
     fields: [
-      { key: 'cookie', label: 'Cookie', type: 'textarea', required: true, placeholder: '登录 codebuddy.ai 后，从浏览器开发者工具复制完整 Cookie' },
-      { key: 'token', label: 'API Token（可选）', type: 'text', required: false, placeholder: 'Bearer Token，如平台需要' },
-      { key: 'checkin_url', label: '签到接口地址（可选）', type: 'text', required: false, placeholder: '留空使用内置默认；官方接口变动时可在此覆盖' }
+      { key: 'access_token', label: 'Access Token', type: 'password', required: true, placeholder: '从 CodeBuddy 获取的 accessToken（Bearer Token）' },
+      { key: 'uid', label: '用户 ID（可选）', type: 'text', required: false, placeholder: '用户 ID，部分接口可能需要' }
     ],
-    defaultUrl: 'https://codebuddy.ai/api/user/checkin',
+    defaultUrl: 'https://www.codebuddy.cn/v2/billing/meter/daily-checkin',
+    statusUrl: 'https://www.codebuddy.cn/v2/billing/meter/checkin-activity-status',
     buildRequest(cred) {
-      const headers = { 'User-Agent': UA, 'Content-Type': 'application/json' };
-      if (cred.cookie) headers['Cookie'] = cred.cookie;
-      if (cred.token) headers['Authorization'] = `Bearer ${cred.token}`;
-      return { url: cred.checkin_url || this.defaultUrl, method: 'POST', headers, body: '{}' };
+      const headers = {
+        'User-Agent': UA,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Domain': 'www.codebuddy.cn'
+      };
+      if (cred.access_token) headers['Authorization'] = `Bearer ${cred.access_token}`;
+      if (cred.uid) headers['X-User-Id'] = cred.uid;
+      return {
+        url: this.defaultUrl,
+        method: 'POST',
+        headers,
+        body: '{}'
+      };
     },
-    parseResponse: (status, body) => parseCommonBody(status, body)
+    buildStatusRequest(cred) {
+      const headers = {
+        'User-Agent': UA,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Domain': 'www.codebuddy.cn'
+      };
+      if (cred.access_token) headers['Authorization'] = `Bearer ${cred.access_token}`;
+      if (cred.uid) headers['X-User-Id'] = cred.uid;
+      return {
+        url: this.statusUrl,
+        method: 'POST',
+        headers,
+        body: '{}'
+      };
+    },
+    parseResponse: (status, body) => {
+      if (status === 401 || status === 403) {
+        return { success: false, authExpired: true, message: `授权已失效(HTTP ${status})，请重新登录授权` };
+      }
+      let json = null;
+      try { json = JSON.parse(body); } catch (e) { /* 非 JSON */ }
+      if (json && typeof json === 'object') {
+        const code = json.code;
+        const msg = json.message || json.msg || '';
+        const data = json.data || {};
+        const credit = toNumber(data.credit) || toNumber(data.todayCredit) || toNumber(data.today_credit) || 0;
+        
+        if (code === 0 || code === 10001 || msg.includes('已签到')) {
+          return { success: true, points: credit, message: withPoints('签到成功', credit) };
+        }
+        if (code === 41000) {
+          return { success: false, message: '签到活动未开始或已结束' };
+        }
+        return { success: false, message: msg || `签到失败(code=${code})` };
+      }
+      return { success: false, message: `签到失败：HTTP ${status}` };
+    },
+    parseStatusResponse: (status, body) => {
+      if (status !== 200) return { checked: null, error: `HTTP ${status}` };
+      let json = null;
+      try { json = JSON.parse(body); } catch (e) { return { checked: null, error: '非 JSON 响应' }; }
+      const data = json.data || json;
+      const checked = data.todayCheckedIn === true || data.today_checked_in === true;
+      return {
+        checked,
+        todayCredit: toNumber(data.todayCredit) || toNumber(data.today_credit) || 0,
+        raw: data
+      };
+    }
+  },
+
+  zcode: {
+    id: 'zcode',
+    name: 'ZCode',
+    desc: '智谱 Z.ai 编程客户端',
+    fields: [
+      { key: 'jwt_token', label: 'JWT Token', type: 'textarea', required: true, placeholder: '从 ZCode 客户端提取的 JWT Token' },
+      { key: 'device_mid', label: '设备 MID（可选）', type: 'text', required: false, placeholder: '设备 MID，部分接口可能需要' },
+      { key: 'app_version', label: '应用版本（可选）', type: 'text', required: false, placeholder: '如 1.0.0，部分接口可能需要' }
+    ],
+    defaultUrl: 'https://zcode.z.ai/api/v1/zcode-plan/billing/claim',
+    previewUrl: 'https://zcode.z.ai/api/v1/zcode-plan/billing/preview',
+    buildRequest(cred) {
+      const headers = {
+        'User-Agent': 'ZCode/' + (cred.app_version || '1.0.0'),
+        'X-Title': 'Z Code@electron',
+        'X-ZCode-App-Version': cred.app_version || '1.0.0',
+        'X-Platform': 'win32-x64',
+        'X-Release-Channel': 'stable',
+        'X-Client-Language': 'zh-CN',
+        'X-Client-Timezone': 'Asia/Shanghai',
+        'X-Os-Category': 'windows',
+        'X-Os-Version': '10.0.19041',
+        'x-request-id': generateUUID()
+      };
+      if (cred.jwt_token) headers['Authorization'] = `Bearer ${cred.jwt_token}`;
+      if (cred.device_mid) headers['X-Device-Mid'] = cred.device_mid;
+      return {
+        url: this.defaultUrl,
+        method: 'POST',
+        headers,
+        body: '{}'
+      };
+    },
+    buildStatusRequest(cred) {
+      const headers = {
+        'User-Agent': 'ZCode/' + (cred.app_version || '1.0.0'),
+        'X-Title': 'Z Code@electron',
+        'X-ZCode-App-Version': cred.app_version || '1.0.0',
+        'X-Platform': 'win32-x64',
+        'X-Release-Channel': 'stable',
+        'X-Client-Language': 'zh-CN',
+        'X-Client-Timezone': 'Asia/Shanghai',
+        'X-Os-Category': 'windows',
+        'X-Os-Version': '10.0.19041',
+        'x-request-id': generateUUID()
+      };
+      if (cred.jwt_token) headers['Authorization'] = `Bearer ${cred.jwt_token}`;
+      if (cred.device_mid) headers['X-Device-Mid'] = cred.device_mid;
+      return {
+        url: this.previewUrl + '?app_version=' + (cred.app_version || '1.0.0') + '&platform=win32-x64',
+        method: 'GET',
+        headers
+      };
+    },
+    parseResponse: (status, body) => {
+      if (status === 401 || status === 403) {
+        return { success: false, authExpired: true, message: `授权已失效(HTTP ${status})，请重新登录授权` };
+      }
+      let json = null;
+      try { json = JSON.parse(body); } catch (e) { /* 非 JSON */ }
+      if (json && typeof json === 'object') {
+        const code = json.code;
+        const msg = json.message || json.msg || '';
+        const data = json.data || {};
+        const plan = data.plan || {};
+        
+        if (code === 0) {
+          const units = toNumber(plan.units) || toNumber(data.units) || 0;
+          return { success: true, points: units, message: withPoints('领取成功', units) };
+        }
+        if (code === 1003) {
+          return { success: false, message: '该套餐已领取过' };
+        }
+        if (code === 1005) {
+          return { success: false, message: '名额已领完' };
+        }
+        if (code === 1002) {
+          return { success: false, message: '该活动已结束' };
+        }
+        if (code === 1004) {
+          return { success: false, message: '不符合领取条件' };
+        }
+        return { success: false, message: msg || `领取失败(code=${code})` };
+      }
+      return { success: false, message: `领取失败：HTTP ${status}` };
+    },
+    parseStatusResponse: (status, body) => {
+      if (status !== 200) return { checked: null, error: `HTTP ${status}` };
+      let json = null;
+      try { json = JSON.parse(body); } catch (e) { return { checked: null, error: '非 JSON 响应' }; }
+      const data = json.data || json;
+      const plans = data.plans || data.list || [];
+      const hasClaimable = plans.some(p => !p.claimed && !p.expired);
+      return {
+        checked: !hasClaimable,
+        hasClaimable,
+        plans: plans,
+        raw: data
+      };
+    }
+  },
+
+  qoder: {
+    id: 'qoder',
+    name: 'Qoder',
+    desc: '阿里 Qoder AI 编程 IDE',
+    fields: [
+      { key: 'token', label: 'Access Token', type: 'textarea', required: true, placeholder: '从 Qoder CN 客户端提取的 Access Token' },
+      { key: 'refresh_token', label: 'Refresh Token（可选）', type: 'textarea', required: false, placeholder: 'Refresh Token，用于自动续期' }
+    ],
+    defaultUrl: 'https://openapi.qoder.com.cn/sash/api/v1/me/campaigns',
+    buildHeaders(cred) {
+      const headers = {
+        'User-Agent': UA,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Origin': 'https://openapi.qoder.com.cn'
+      };
+      if (cred.token) headers['Authorization'] = `Bearer ${cred.token}`;
+      return headers;
+    },
+    buildRequest(cred) {
+      return {
+        url: this.defaultUrl + '?forceRefresh=true',
+        method: 'GET',
+        headers: this.buildHeaders(cred)
+      };
+    },
+    buildStatusRequest(cred) {
+      return {
+        url: this.defaultUrl + '?forceRefresh=true',
+        method: 'GET',
+        headers: this.buildHeaders(cred)
+      };
+    },
+    // Qoder 自定义签到流程：先获取活动列表 → 找到可领取的 → 执行领取
+    async customCheckin(cred, fetchFn) {
+      const headers = this.buildHeaders(cred);
+      // 1. 获取活动列表
+      const listRes = await fetchFn(this.defaultUrl + '?forceRefresh=true', {
+        method: 'GET',
+        headers
+      });
+      const listBody = await listRes.text();
+      if (listRes.status === 401 || listRes.status === 403) {
+        return { success: false, authExpired: true, message: 'Qoder 登录已失效，请重新登录 Qoder CN 客户端' };
+      }
+      if (listRes.status !== 200) {
+        return { success: false, message: `获取活动列表失败：HTTP ${listRes.status}` };
+      }
+      let listJson;
+      try { listJson = JSON.parse(listBody); } catch (e) { return { success: false, message: '活动列表响应格式错误' }; }
+      const data = listJson.data || listJson;
+      const campaigns = data.campaigns || data.list || [];
+      // 找今日可领取的活动（daily 且未领取）
+      const target = campaigns.find(c => c.daily && !c.claimed && c.claimStatus !== 'CLAIMED');
+      if (!target) {
+        return { success: true, points: 0, message: '今日已领取或无活动可领' };
+      }
+      // 2. 执行领取
+      const campaignId = target.campaignId || target.id;
+      const claimUrl = this.defaultUrl + '/' + encodeURIComponent(campaignId) + '/claim';
+      const claimRes = await fetchFn(claimUrl, {
+        method: 'POST',
+        headers,
+        body: '{}'
+      });
+      const claimBody = await claimRes.text();
+      if (claimRes.status === 401 || claimRes.status === 403) {
+        return { success: false, authExpired: true, message: 'Qoder 登录已失效，请重新登录 Qoder CN 客户端' };
+      }
+      let claimJson;
+      try { claimJson = JSON.parse(claimBody); } catch (e) { claimJson = null; }
+      const result = claimJson?.result || claimJson?.status || '';
+      const benefit = claimJson?.benefit || claimJson?.data?.benefit || {};
+      const amount = toNumber(benefit.amount) || toNumber(target.amount) || 100;
+      // 已领取过
+      if (claimRes.status === 409 || result === 'ALREADY_CLAIMED' || claimJson?.replayed) {
+        return { success: true, points: amount, message: `今日已领取 ${amount} Credits` };
+      }
+      if (claimRes.status >= 200 && claimRes.status < 300) {
+        return { success: true, points: amount, message: `领取成功：+${amount} Credits` };
+      }
+      return { success: false, message: `领取失败：HTTP ${claimRes.status}` };
+    },
+    parseResponse: (status, body) => parseCommonBody(status, body),
+    parseStatusResponse: (status, body) => {
+      if (status !== 200) return { checked: null, error: `HTTP ${status}` };
+      let json = null;
+      try { json = JSON.parse(body); } catch (e) { return { checked: null, error: '非 JSON 响应' }; }
+      const data = json.data || json;
+      const campaigns = data.campaigns || data.list || [];
+      const todayCampaign = campaigns.find(c => c.daily && !c.claimed && c.claimStatus !== 'CLAIMED');
+      const checked = !todayCampaign;
+      return {
+        checked,
+        hasClaimable: !!todayCampaign,
+        campaignId: todayCampaign?.campaignId || todayCampaign?.id,
+        raw: data
+      };
+    }
   },
 
   custom: {
@@ -231,17 +610,27 @@ async function runCheckin(account, trigger) {
   const cred = parseCredentials(account);
   let result;
   try {
-    const req = adapter.buildRequest(cred);
-    if (!/^https?:\/\//i.test(req.url)) throw new Error('无效的接口地址：' + req.url);
-    const res = await fetch(req.url, {
-      method: req.method,
-      headers: req.headers,
-      body: req.body,
-      redirect: 'follow',
-      signal: AbortSignal.timeout(20000)
-    });
-    const body = await res.text();
-    result = adapter.parseResponse(res.status, body, cred);
+    // 支持自定义签到流程（如 Qoder 需要先获取活动列表再领取）
+    if (typeof adapter.customCheckin === 'function') {
+      const fetchFn = (url, opts) => fetch(url, {
+        ...opts,
+        redirect: 'follow',
+        signal: AbortSignal.timeout(20000)
+      });
+      result = await adapter.customCheckin(cred, fetchFn);
+    } else {
+      const req = adapter.buildRequest(cred);
+      if (!/^https?:\/\//i.test(req.url)) throw new Error('无效的接口地址：' + req.url);
+      const res = await fetch(req.url, {
+        method: req.method,
+        headers: req.headers,
+        body: req.body,
+        redirect: 'follow',
+        signal: AbortSignal.timeout(20000)
+      });
+      const body = await res.text();
+      result = adapter.parseResponse(res.status, body, cred);
+    }
   } catch (err) {
     result = { success: false, message: '请求异常：' + (err && err.message ? err.message : String(err)) };
   } finally {
