@@ -1,10 +1,11 @@
 # AI 签到助手（AI-Checkin）
 
-一款 Docker 自部署的**多平台 AI 应用自动签到系统**，支持 Trae、WorkBuddy、CodeBuddy 等常用 AI 平台，内置 SQLite 存储，无需外部数据库。
+一款 Docker 自部署的**多平台 AI 应用自动签到系统**，内置 Trae、WorkBuddy、CodeBuddy、ZCode、Qoder 五大主流 AI 编程平台适配器，另支持自定义平台接入任意服务，内置 SQLite 存储，无需外部数据库。
 
 ## 功能特性
 
-- **多平台签到**：内置 Trae / WorkBuddy / CodeBuddy 适配器，另提供「自定义平台」接入任意平台
+- **多平台签到**：内置 **Trae / WorkBuddy / CodeBuddy / ZCode / Qoder** 五大平台适配器（真实接口配置，参考公开实现），另提供「自定义平台」接入任意平台
+- **每日签到 + 活动领取双模式**：Trae / WorkBuddy / CodeBuddy 为每日签到；ZCode / Qoder 为活动领取制（Qoder 每日 10:00 后可领 100 Credits）
 - **每日定时签到**：每个账号可单独设置签到时间（默认 08:00），到点自动执行
 - **授权保持与自动登出**：平台授权登录后保持 **7 天**，到期自动登出（清除本地凭据）并通过站内通知提醒重新授权
 - **多用户注册**：可开关的开放注册，每位用户独立管理自己的平台账号、记录与通知
@@ -96,15 +97,26 @@ services:
 
 ## 平台授权与签到
 
-### 授权方式
+### 内置平台配置
 
-进入「平台账号」→「添加平台账号」，选择平台类型并填写凭据：
+进入「平台账号」→「添加平台账号」，选择平台类型并填写凭据。各内置平台的接口与字段如下：
 
-| 字段 | 获取方式 |
-|------|----------|
-| Cookie | 浏览器登录目标平台 → F12 开发者工具 → Network 面板 → 任选请求复制 `Cookie` 请求头 |
-| API Token | 部分平台需要，按平台实际情况填写 |
-| 签到接口地址 | 可选。留空使用内置默认；官方接口变动时可在此覆盖 |
+| 平台 | 类型 | 认证方式 | 必填字段 | 可选字段 |
+|------|------|----------|----------|----------|
+| **Trae**（字节） | 每日签到 | `Authorization: Cloud-IDE-JWT {token}` | JWT Token | 设备 ID、用户区域 |
+| **WorkBuddy**（腾讯） | 每日签到 | `Authorization: Bearer {access_token}` | Access Token | 用户 ID、域名（可切换 workbuddy.cn / codebuddy.cn） |
+| **CodeBuddy**（腾讯） | 每日签到 | `Authorization: Bearer {access_token}` | Access Token | 用户 ID |
+| **ZCode**（智谱 Z.ai） | 活动领取 | `Authorization: Bearer {jwt_token}` | JWT Token | 设备 MID、应用版本 |
+| **Qoder**（阿里） | 活动领取 | `Authorization: Bearer {token}` | Access Token | Refresh Token |
+
+**Token 获取通用方法**：登录对应平台客户端或网页版 → F12 开发者工具 → Network 面板 → 找任意已登录请求，复制其 `Authorization` 头中的 Token 值。
+
+### 各平台说明
+
+- **Trae**：调用 `api.trae.cn` 签到接口；若返回「本设备今日已有账号签到」（code=9095）说明当日已签
+- **WorkBuddy / CodeBuddy**：同一套接口格式，域名不同；WorkBuddy 账号可通过「域名」字段切换到 codebuddy.cn 域名；返回「已签到」（code=10001）视为成功，code=41000 表示活动未开始
+- **ZCode**：非每日签到，而是**套餐领取制**，有可领套餐时执行领取；已领完（code=1003）或名额耗尽（code=1005）会记录为对应提示
+- **Qoder**：**每日领取 100 Credits**，服务端每日 **10:00（UTC+8）** 刷新额度；系统采用两步流程：先获取活动列表，再对当日未领取的活动执行领取；建议将签到时间设置在 10:00 之后
 
 ### 自定义平台
 
@@ -182,7 +194,13 @@ ai-checkin/
 ## 常见问题
 
 **Q: 签到显示失败？**
-检查 Cookie 是否正确、是否已过期；平台接口是否变更（可抓包后通过「签到接口地址」覆盖）；查看「签到记录」中的失败消息。
+检查 Token / Cookie 是否正确、是否已过期（平台返回 401/403 会自动登出并通知）；平台接口是否变更（可抓包后通过「签到接口地址」覆盖）；查看「签到记录」中的失败消息。
+
+**Q: Qoder 为什么早上签到失败？**
+Qoder 服务端每日 10:00（UTC+8）才刷新当日额度，请将该账号的签到时间设置在 10:00 之后。
+
+**Q: ZCode 提示「已领取过 / 名额已领完」？**
+ZCode 是活动领取制而非每日签到，属正常返回，对应活动状态会记录在签到日志中。
 
 **Q: 如何修改端口？**
 重建容器时指定 `-p 外部:内部` 与 `-e INTERNAL_PORT=内部`；后台「全局设置」中的端口为记录展示用途。
