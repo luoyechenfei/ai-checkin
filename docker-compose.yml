@@ -5,7 +5,7 @@ services:
     container_name: ai-checkin
     # 使用 GitHub Actions 构建并发布的镜像（多架构 amd64/arm64）
     # 可通过 IMAGE_TAG 固定版本，例如：IMAGE_TAG=v1.0.0 / sha-93607ea
-    image: ghcr.io/luoyechenfei/ai-checkin:${IMAGE_TAG:-latest}
+    image: ghcr.io/luoyechenfei/ai-checkin:latest
     # 每次启动都拉取最新镜像，确保与仓库发布同步
     pull_policy: always
     restart: unless-stopped
