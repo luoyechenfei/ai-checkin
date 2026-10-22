@@ -69,6 +69,16 @@ CREATE INDEX IF NOT EXISTS idx_logs_account ON logs(account_id);
 CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, is_read);
 `);
 
+/** 增量迁移：为旧数据库补列（SQLite 无 ADD COLUMN IF NOT EXISTS） */
+function ensureColumn(table, column, definition) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.some(c => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+// 签到获得的积分（REAL 兼容小数积分；拿不到积分的平台记 0）
+ensureColumn('logs', 'points', 'REAL NOT NULL DEFAULT 0');
+
 function getSetting(key, fallback) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
   return row ? row.value : fallback;

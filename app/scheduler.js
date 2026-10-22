@@ -30,14 +30,22 @@ function tick() {
         `该平台授权已保持满 7 天，系统已自动登出并清除本地凭据。如需继续签到，请前往「平台账号」重新授权。`);
     }
 
-    // 2) 每日定时签到（每个账号每天最多一次自动签到）
+    // 2) 每日定时签到（成功后当天不再执行；失败按冷却时间自动重试）
     const accounts = db.prepare(`SELECT * FROM accounts WHERE status = 'active'`).all();
+    const todayStart = today + ' 00:00:00';
+    const nowMs = Date.parse(now.replace(' ', 'T') + 'Z');
     for (const acc of accounts) {
       const t = acc.checkin_time || '08:00';
-      const doneToday = acc.last_checkin_at && acc.last_checkin_at.slice(0, 10) >= today;
-      if (hhmm >= t && !doneToday) {
-        runCheckin(acc, 'scheduled').catch(err => console.error('[scheduler] 签到异常:', err.message));
+      if (hhmm < t) continue;
+      const last = db.prepare(
+        `SELECT success, created_at FROM logs WHERE account_id = ? AND created_at >= ? ORDER BY id DESC LIMIT 1`
+      ).get(acc.id, todayStart);
+      if (last && last.success === 1) continue;
+      if (last) {
+        const lastMs = Date.parse(last.created_at.replace(' ', 'T') + 'Z');
+        if (nowMs - lastMs < config.RETRY_MINUTES * 60000) continue;
       }
+      runCheckin(acc, 'scheduled').catch(err => console.error('[scheduler] 签到异常:', err.message));
     }
 
     // 3) 每日清理过期 Web 会话

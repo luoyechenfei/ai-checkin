@@ -13,6 +13,63 @@ const { addDays } = require('./security');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 
+// ---------- 积分识别 ----------
+/** 常见积分字段名（小写匹配） */
+const POINT_KEYS = [
+  'points', 'point', 'credit', 'credits', 'score', 'integral', 'integrals',
+  'reward', 'rewards', 'coin', 'coins', 'balance', 'total_points', 'earned',
+  '积分', '奖励'
+];
+
+function toNumber(v) {
+  if (typeof v === 'number' && Number.isFinite(v)) return Math.round(v * 100) / 100;
+  if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) {
+    return Math.round(Number(v) * 100) / 100;
+  }
+  return null;
+}
+
+/** 按点分路径取值，如 data.points / result.reward.points */
+function lookupPath(obj, path) {
+  return String(path).split('.').reduce((cur, key) => (cur == null ? undefined : cur[key]), obj);
+}
+
+/** 在 JSON 中递归查找积分字段；优先常见字段名，最多 5 层 */
+function findPoints(obj, depth = 0) {
+  if (!obj || typeof obj !== 'object' || depth > 5) return null;
+  for (const key of Object.keys(obj)) {
+    if (!POINT_KEYS.includes(key.toLowerCase())) continue;
+    const direct = toNumber(obj[key]);
+    if (direct !== null) return direct;
+    if (obj[key] && typeof obj[key] === 'object') {
+      const nested = findPoints(obj[key], depth + 1);
+      if (nested !== null) return nested;
+    }
+  }
+  for (const key of Object.keys(obj)) {
+    const child = obj[key];
+    if (child && typeof child === 'object') {
+      const found = findPoints(child, depth + 1);
+      if (found !== null) return found;
+    }
+  }
+  return null;
+}
+
+/** 提取积分：优先自定义路径，其次自动识别；识别不到返回 null */
+function extractPoints(json, cred) {
+  if (!json) return null;
+  if (cred && cred.points_path) {
+    const v = toNumber(lookupPath(json, cred.points_path));
+    if (v !== null) return v;
+  }
+  return findPoints(json);
+}
+
+function withPoints(baseMessage, points) {
+  return points === null || points === 0 ? baseMessage : `${baseMessage}，获得 ${points} 积分`;
+}
+
 /** 解析适配器返回的响应体，尽量兼容常见 JSON 返回结构 */
 function parseCommonBody(status, body) {
   if (status === 401 || status === 403) {
@@ -20,29 +77,43 @@ function parseCommonBody(status, body) {
   }
   let json = null;
   try { json = JSON.parse(body); } catch (e) { /* 非 JSON */ }
-  if (json) {
+  if (json && typeof json === 'object') {
     const code = json.code !== undefined ? json.code : json.errcode;
-    const ok = code === 0 || code === '0' || json.success === true ||
-               json.status === 'success' || json.isSuccess === true;
+    const hasVerdict = code !== undefined || json.success !== undefined ||
+                       json.status !== undefined || json.isSuccess !== undefined;
+    // 有明确判定字段时按其结果；否则以 HTTP 状态码为准（避免 JSON 无 code 时被误判为失败）
+    const ok = hasVerdict
+      ? (code === 0 || code === '0' || code === 200 || code === '200' ||
+         json.success === true || json.isSuccess === true ||
+         json.status === 'success' || json.status === 'ok' ||
+         json.status === 200 || json.status === '200')
+      : (status >= 200 && status < 300);
     const msg = json.message || json.msg || (json.data && (json.data.message || json.data.msg)) || '';
-    return { success: !!ok, message: msg || (ok ? '签到成功' : `签到失败：${JSON.stringify(json).slice(0, 200)}`) };
+    const points = ok ? extractPoints(json) : null;
+    return {
+      success: !!ok,
+      points,
+      message: msg ? withPoints(msg, points)
+        : (ok ? withPoints('签到成功', points) : `签到失败：${JSON.stringify(json).slice(0, 200)}`)
+    };
   }
   const ok = status >= 200 && status < 300;
-  return { success: ok, message: ok ? '签到成功' : `签到失败：HTTP ${status}` };
+  return { success: ok, points: null, message: ok ? '签到成功' : `签到失败：HTTP ${status}` };
 }
 
 /** 通用平台（custom）响应判定 */
-function parseCustomBody(keyword, status, body) {
+function parseCustomBody(keyword, status, body, cred) {
   if (status === 401 || status === 403) {
     return { success: false, authExpired: true, message: `授权已失效(HTTP ${status})，请重新登录授权` };
   }
   const ok = status >= 200 && status < 300 && (!keyword || String(body).includes(keyword));
-  let msg = '';
-  try {
-    const j = JSON.parse(body);
-    msg = (j && (j.message || j.msg)) || '';
-  } catch (e) { /* 非 JSON 响应 */ }
-  if (ok) return { success: true, message: msg ? `签到成功：${msg}` : '签到成功' };
+  let json = null;
+  try { json = JSON.parse(body); } catch (e) { /* 非 JSON 响应 */ }
+  const msg = (json && (json.message || json.msg)) || '';
+  if (ok) {
+    const points = extractPoints(json, cred);
+    return { success: true, points, message: withPoints(msg ? `签到成功：${msg}` : '签到成功', points) };
+  }
   return {
     success: false,
     message: `签到失败：HTTP ${status}${keyword && !msg ? ` 或未匹配关键字“${keyword}”` : ''}${msg ? `：${msg}` : ''}`
@@ -118,7 +189,8 @@ const REGISTRY = {
       { key: 'cookie', label: 'Cookie（可选）', type: 'textarea', required: false, placeholder: 'k1=v1; k2=v2' },
       { key: 'headers', label: '额外请求头（可选，JSON）', type: 'textarea', required: false, placeholder: '{"Authorization": "Bearer xxx"}' },
       { key: 'body', label: '请求体（可选）', type: 'textarea', required: false, placeholder: '{"action":"checkin"}' },
-      { key: 'keyword', label: '成功关键字（可选）', type: 'text', required: false, placeholder: '响应中包含该关键字才视为成功，留空则 HTTP 2xx 即成功' }
+      { key: 'keyword', label: '成功关键字（可选）', type: 'text', required: false, placeholder: '响应中包含该关键字才视为成功，留空则 HTTP 2xx 即成功' },
+      { key: 'points_path', label: '积分字段路径（可选）', type: 'text', required: false, placeholder: '如 data.reward.points；留空自动识别 points/credit/reward 等字段' }
     ],
     buildRequest(cred) {
       const headers = { 'User-Agent': UA };
@@ -132,7 +204,7 @@ const REGISTRY = {
       return { url: cred.url, method, headers, body };
     },
     parseResponse(status, body, cred) {
-      return parseCustomBody(cred && cred.keyword, status, body);
+      return parseCustomBody(cred && cred.keyword, status, body, cred);
     }
   }
 };
@@ -177,9 +249,10 @@ async function runCheckin(account, trigger) {
   }
 
   // 写日志并更新账号状态
-  const resultText = `${result.success ? '成功' : '失败'}（${trigger === 'manual' ? '手动' : '定时'}）：${result.message}`;
-  db.prepare('INSERT INTO logs(account_id, user_id, platform, success, message, created_at) VALUES(?,?,?,?,?,?)')
-    .run(account.id, account.user_id, account.platform, result.success ? 1 : 0, result.message, now);
+  const points = result.success && typeof result.points === 'number' ? result.points : 0;
+  const resultText = `${result.success ? '成功' : '失败'}（${trigger === 'manual' ? '手动' : '定时'}）${points > 0 ? ` +${points}积分` : ''}：${result.message}`;
+  db.prepare('INSERT INTO logs(account_id, user_id, platform, success, message, points, created_at) VALUES(?,?,?,?,?,?,?)')
+    .run(account.id, account.user_id, account.platform, result.success ? 1 : 0, result.message, points, now);
   db.prepare('UPDATE accounts SET last_checkin_at = ?, last_result = ? WHERE id = ?')
     .run(now, resultText, account.id);
 

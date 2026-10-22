@@ -24,7 +24,7 @@
   <% } else { %>
   <div class="table-wrap">
   <table class="table">
-    <thead><tr><th>时间</th><th>平台</th><th>账号</th><th>结果</th><th>消息</th></tr></thead>
+    <thead><tr><th>时间</th><th>平台</th><th>账号</th><th>结果</th><th>积分</th><th>消息</th></tr></thead>
     <tbody>
       <% logs.forEach(l => { %>
       <tr>
@@ -32,6 +32,7 @@
         <td><span class="pill"><%= l.platformName %></span></td>
         <td><%= l.account_name || '-' %></td>
         <td><span class="chip <%= l.success ? 'ok' : 'err' %>"><%= l.success ? '成功' : '失败' %></span></td>
+        <td class="nowrap"><%= l.points > 0 ? '+' + l.points : (l.success ? '0' : '-') %></td>
         <td class="msg-cell"><%= l.message || '' %></td>
       </tr>
       <% }) %>

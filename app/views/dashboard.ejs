@@ -9,6 +9,8 @@
   <div class="stat card"><div class="stat-num"><%= stats.total %></div><div class="stat-label">平台账号</div></div>
   <div class="stat card"><div class="stat-num ok"><%= stats.active %></div><div class="stat-label">活跃授权</div></div>
   <div class="stat card"><div class="stat-num"><%= stats.todayDone %></div><div class="stat-label">今日已签</div></div>
+  <div class="stat card"><div class="stat-num ok"><%= stats.todayPoints %></div><div class="stat-label">今日积分</div></div>
+  <div class="stat card"><div class="stat-num"><%= stats.totalPoints %></div><div class="stat-label">累计积分</div></div>
   <div class="stat card"><div class="stat-num <%= stats.expired > 0 ? 'err' : '' %>"><%= stats.expired %></div><div class="stat-label">待重新授权</div></div>
 </div>
 
@@ -48,6 +50,7 @@
             <td class="muted nowrap"><%= l.created_at %></td>
             <td><span class="pill"><%= l.platformName %></span></td>
             <td><span class="chip <%= l.success ? 'ok' : 'err' %>"><%= l.success ? '成功' : '失败' %></span>
+              <% if (l.points > 0) { %><span class="chip ok">+<%= l.points %></span><% } %>
               <span class="muted small"><%= (l.message || '').slice(0, 40) %></span></td>
           </tr>
           <% }) %>

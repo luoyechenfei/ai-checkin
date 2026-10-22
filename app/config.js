@@ -20,5 +20,7 @@ module.exports = {
   AUTH_KEEP_DAYS: 7,
   // 调度器轮询间隔（秒）
   TICK_SECONDS: 30,
+  // 定时签到失败后的重试冷却（分钟）
+  RETRY_MINUTES: 10,
   DEFAULT_TIMEZONE: 'Asia/Shanghai'
 };

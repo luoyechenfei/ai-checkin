@@ -82,8 +82,17 @@ router.get('/dashboard', requireAuth, (req, res) => {
     total: accounts.length,
     active: accounts.filter(a => a.status === 'active').length,
     expired: accounts.filter(a => a.expired && a.status !== 'disabled').length,
-    todayDone: accounts.filter(a => a.last_checkin_at && a.last_checkin_at.slice(0, 10) >= today).length
+    todayDone: db.prepare(
+      `SELECT COUNT(DISTINCT account_id) AS c FROM logs
+       WHERE user_id = ? AND success = 1 AND substr(created_at, 1, 10) = ?`).get(uid, today).c
   };
+
+  const pointRow = db.prepare(
+    `SELECT COALESCE(SUM(points), 0) AS total,
+            COALESCE(SUM(CASE WHEN substr(created_at, 1, 10) = ? THEN points ELSE 0 END), 0) AS today
+     FROM logs WHERE user_id = ? AND success = 1`).get(today, uid);
+  stats.todayPoints = pointRow.today;
+  stats.totalPoints = pointRow.total;
 
   const recentLogs = db.prepare(
     `SELECT l.*, a.name AS account_name FROM logs l
@@ -104,6 +113,13 @@ router.get('/accounts', requireAuth, (req, res) => {
   const now = getNow();
   const accounts = db.prepare('SELECT * FROM accounts WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id)
     .map(a => decorateAccount(a, now));
+  // 每个账号累计获得的积分
+  const sums = db.prepare(
+    `SELECT account_id, COALESCE(SUM(points), 0) AS points FROM logs
+     WHERE user_id = ? AND success = 1 AND account_id IS NOT NULL GROUP BY account_id`).all(req.user.id);
+  const pointMap = {};
+  for (const s of sums) pointMap[s.account_id] = s.points;
+  for (const a of accounts) a.points = pointMap[a.id] || 0;
   render(req, res, 'accounts', {
     title: '平台账号',
     accounts,

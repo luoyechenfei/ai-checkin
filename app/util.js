@@ -25,8 +25,8 @@ function isValidTimezone(tz) {
 
 /** 计算从 nowStr(YYYY-MM-DD HH:MM:SS) 到 expiresStr 的剩余整天天数 */
 function daysLeft(nowStr, expiresStr) {
-  const t1 = new Date(nowStr.replace(' ', 'T')).getTime();
-  const t2 = new Date(expiresStr.replace(' ', 'T')).getTime();
+  const t1 = new Date(nowStr.replace(' ', 'T') + 'Z').getTime();
+  const t2 = new Date(expiresStr.replace(' ', 'T') + 'Z').getTime();
   return Math.ceil((t2 - t1) / 86400000);
 }
 

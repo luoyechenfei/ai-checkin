@@ -91,10 +91,12 @@ function requireAdmin(req, res, next) {
 }
 
 function addDays(dateStr, days) {
-  const d = new Date(dateStr.replace(' ', 'T'));
-  d.setDate(d.getDate() + days);
+  // 入参是“按设置时区格式化好的墙上时间”，不含时区信息。
+  // 统一按 UTC 解析/格式化，避免受容器本地时区影响产生偏移。
+  const d = new Date(dateStr.replace(' ', 'T') + 'Z');
+  d.setUTCDate(d.getUTCDate() + days);
   const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
 }
 
 module.exports = {

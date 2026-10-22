@@ -65,6 +65,7 @@
 
   <div class="acc-meta">
     每日签到 <strong><%= a.checkin_time %></strong>
+    · 累计积分 <strong><%= a.points || 0 %></strong>
     <% if (a.last_checkin_at) { %>
       · 最近 <%= a.last_checkin_at.slice(5, 16) %>：<span class="<%= (a.last_result || '').startsWith('成功') ? 'text-ok' : 'text-err' %>"><%= a.last_result || '' %></span>
     <% } else { %>
