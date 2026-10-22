@@ -1,0 +1,45 @@
+<%- include('partials/header') %>
+
+<div class="page-head">
+  <h1>签到记录</h1>
+  <form method="get" action="/logs" class="filter-form">
+    <select name="platform">
+      <option value="">全部平台</option>
+      <% platforms.forEach(p => { %>
+        <option value="<%= p.id %>" <%= filterPlatform === p.id ? 'selected' : '' %>><%= p.name %></option>
+      <% }) %>
+    </select>
+    <select name="status">
+      <option value="">全部结果</option>
+      <option value="ok" <%= filterStatus === 'ok' ? 'selected' : '' %>>成功</option>
+      <option value="fail" <%= filterStatus === 'fail' ? 'selected' : '' %>>失败</option>
+    </select>
+    <button class="btn ghost sm" type="submit">筛选</button>
+  </form>
+</div>
+
+<div class="card">
+  <% if (logs.length === 0) { %>
+    <p class="empty">暂无记录</p>
+  <% } else { %>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>时间</th><th>平台</th><th>账号</th><th>结果</th><th>消息</th></tr></thead>
+    <tbody>
+      <% logs.forEach(l => { %>
+      <tr>
+        <td class="muted nowrap"><%= l.created_at %></td>
+        <td><span class="pill"><%= l.platformName %></span></td>
+        <td><%= l.account_name || '-' %></td>
+        <td><span class="chip <%= l.success ? 'ok' : 'err' %>"><%= l.success ? '成功' : '失败' %></span></td>
+        <td class="msg-cell"><%= l.message || '' %></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  </div>
+  <p class="muted small">最多显示最近 200 条</p>
+  <% } %>
+</div>
+
+<%- include('partials/footer') %>

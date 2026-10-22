@@ -1,0 +1,117 @@
+<%- include('partials/header') %>
+
+<div class="page-head"><h1>管理后台</h1></div>
+
+<div class="grid-2">
+  <div class="card">
+    <h2 class="card-title">全局设置</h2>
+    <form method="post" action="/admin/settings" class="form">
+      <div class="field">
+        <label>站点名称</label>
+        <input type="text" name="site_name" value="<%= settings.site_name %>" maxlength="32" required>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>默认每日签到时间</label>
+          <input type="time" name="default_checkin_time" value="<%= settings.default_checkin_time %>">
+        </div>
+        <div class="field">
+          <label>时区（IANA 格式）</label>
+          <input type="text" name="timezone" value="<%= settings.timezone %>" required>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>内部端口（容器内）</label>
+          <input type="number" name="internal_port" value="<%= settings.internal_port %>" min="1" max="65535">
+        </div>
+        <div class="field">
+          <label>外部端口（宿主机映射）</label>
+          <input type="number" name="external_port" value="<%= settings.external_port %>" min="1" max="65535">
+        </div>
+      </div>
+      <p class="hint">端口修改需与 Docker 映射参数保持一致（<code>-p 外部端口:内部端口</code>），并重建容器后生效。</p>
+      <label class="check-line">
+        <input type="checkbox" name="allow_register" value="1" <%= settings.allow_register === '1' ? 'checked' : '' %>> 开放用户注册
+      </label>
+      <button class="btn primary" type="submit">保存设置</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 class="card-title">用户管理（<%= users.length %>）</h2>
+    <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>用户名</th><th>角色</th><th>账号数</th><th>状态</th><th>操作</th></tr></thead>
+      <tbody>
+        <% users.forEach(u => { %>
+        <tr>
+          <td><%= u.username %></td>
+          <td><%= u.is_admin ? '管理员' : '用户' %></td>
+          <td><%= u.account_count %></td>
+          <td><span class="chip <%= u.status === 'active' ? 'ok' : 'warn' %>"><%= u.status === 'active' ? '正常' : '已禁用' %></span></td>
+          <td>
+            <div class="op-group">
+              <% if (u.status === 'active') { %>
+              <form class="inline-form" method="post" action="/admin/users/<%= u.id %>/op">
+                <input type="hidden" name="op" value="disable">
+                <button class="btn ghost sm" type="submit">禁用</button>
+              </form>
+              <% } else { %>
+              <form class="inline-form" method="post" action="/admin/users/<%= u.id %>/op">
+                <input type="hidden" name="op" value="enable">
+                <button class="btn ghost sm" type="submit">启用</button>
+              </form>
+              <% } %>
+              <details class="subform-wrap">
+                <summary class="btn ghost sm">重置密码</summary>
+                <form class="form subform" method="post" action="/admin/users/<%= u.id %>/op">
+                  <input type="hidden" name="op" value="resetpw">
+                  <div class="field">
+                    <label>新密码（至少 6 位）</label>
+                    <input type="text" name="new_password" minlength="6" required>
+                  </div>
+                  <button class="btn primary sm" type="submit">确认重置</button>
+                </form>
+              </details>
+              <form class="inline-form" method="post" action="/admin/users/<%= u.id %>/op"
+                    onsubmit="return confirm('确定删除用户「<%= u.username %>」？其全部数据将一并删除。')">
+                <input type="hidden" name="op" value="delete">
+                <button class="btn danger sm" type="submit">删除</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="card-title">全部平台账号（最近 100 条）</h2>
+  <% if (accounts.length === 0) { %>
+    <p class="empty">暂无数据</p>
+  <% } else { %>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>归属用户</th><th>平台</th><th>备注</th><th>状态</th><th>每日时间</th><th>到期时间</th></tr></thead>
+    <tbody>
+      <% accounts.forEach(a => { %>
+      <tr>
+        <td><%= a.username || '-' %></td>
+        <td><span class="pill"><%= a.platformName %></span></td>
+        <td><%= a.name %></td>
+        <td><span class="chip <%= a.status === 'active' ? 'ok' : (a.expired ? 'err' : 'warn') %>"><%= a.status === 'active' ? '活跃' : (a.status === 'expired' ? '已过期' : '已暂停') %></span></td>
+        <td><%= a.checkin_time %></td>
+        <td class="muted"><%= a.expires_at || '-' %></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  </div>
+  <% } %>
+</div>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,26 @@
+<%- include('partials/header') %>
+
+<div class="auth-wrap">
+  <div class="card auth-card">
+    <h1 class="auth-title">注册</h1>
+    <p class="auth-sub">创建账号后即可添加自己的平台授权</p>
+    <form method="post" action="/register" class="form">
+      <div class="field">
+        <label>用户名</label>
+        <input type="text" name="username" maxlength="32" placeholder="2-32 个字符" required autofocus>
+      </div>
+      <div class="field">
+        <label>密码</label>
+        <input type="password" name="password" minlength="6" placeholder="至少 6 位" required>
+      </div>
+      <div class="field">
+        <label>确认密码</label>
+        <input type="password" name="password2" minlength="6" required>
+      </div>
+      <button class="btn primary block" type="submit">注 册</button>
+    </form>
+    <p class="auth-foot">已有账号？<a href="/login">直接登录</a></p>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,123 @@
+<%- include('partials/header') %>
+
+<div class="page-head">
+  <h1>平台账号</h1>
+  <span class="muted">授权登录后保持 7 天，到期自动登出并通知</span>
+</div>
+
+<div class="card">
+  <h2 class="card-title">添加平台账号</h2>
+  <form method="post" action="/accounts" class="form">
+    <div class="field-row">
+      <div class="field">
+        <label>平台类型 <span class="req">*</span></label>
+        <select name="platform" id="platformSelect">
+          <% platforms.forEach(p => { %>
+            <option value="<%= p.id %>"><%= p.name %> - <%= p.desc %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="field">
+        <label>备注名称 <span class="req">*</span></label>
+        <input type="text" name="name" maxlength="32" placeholder="如：我的 Trae 主账号" required>
+      </div>
+      <div class="field">
+        <label>每日签到时间</label>
+        <input type="time" name="checkin_time" value="08:00">
+      </div>
+    </div>
+
+    <% platforms.forEach(p => { %>
+      <div class="cred-fields" data-platform="<%= p.id %>" hidden>
+        <%- include('partials/credfields', { adapter: registry[p.id] }) %>
+      </div>
+    <% }) %>
+
+    <p class="hint">获取方式：在浏览器登录目标平台 → F12 打开开发者工具 → 网络(Network)面板中复制请求 Cookie。</p>
+    <button class="btn primary" type="submit">添加并授权</button>
+  </form>
+</div>
+
+<h2 class="section-title">我的账号（<%= accounts.length %>）</h2>
+
+<% if (accounts.length === 0) { %>
+  <div class="card"><p class="empty">还没有平台账号，请在上方添加。</p></div>
+<% } %>
+
+<% accounts.forEach(a => { %>
+<div class="card account-card <%= a.expired ? 'is-expired' : '' %>">
+  <div class="acc-head">
+    <div class="acc-title">
+      <span class="pill"><%= a.platformName %></span>
+      <strong><%= a.name %></strong>
+    </div>
+    <div class="acc-status">
+      <% if (a.status === 'active') { %>
+        <span class="chip ok">活跃</span>
+        <% if (a.daysLeft !== null) { %><span class="muted small">授权剩 <%= a.daysLeft %> 天</span><% } %>
+      <% } else if (a.status === 'expired') { %>
+        <span class="chip err">授权已过期 · 请重新授权</span>
+      <% } else { %>
+        <span class="chip warn">已暂停</span>
+      <% } %>
+    </div>
+  </div>
+
+  <div class="acc-meta">
+    每日签到 <strong><%= a.checkin_time %></strong>
+    <% if (a.last_checkin_at) { %>
+      · 最近 <%= a.last_checkin_at.slice(5, 16) %>：<span class="<%= (a.last_result || '').startsWith('成功') ? 'text-ok' : 'text-err' %>"><%= a.last_result || '' %></span>
+    <% } else { %>
+      · 尚未签到
+    <% } %>
+  </div>
+
+  <div class="acc-actions">
+    <form method="post" action="/accounts/<%= a.id %>/checkin" class="inline-form">
+      <button class="btn primary sm" type="submit">立即签到</button>
+    </form>
+    <% if (a.status !== 'expired') { %>
+    <form method="post" action="/accounts/<%= a.id %>/toggle" class="inline-form">
+      <button class="btn ghost sm" type="submit"><%= a.status === 'active' ? '暂停' : '启用' %></button>
+    </form>
+    <% } %>
+    <details class="subform-wrap">
+      <summary class="btn ghost sm">重新授权</summary>
+      <form method="post" action="/accounts/<%= a.id %>/reauth" class="form subform">
+        <%- include('partials/credfields', { adapter: registry[a.platform] }) %>
+        <button class="btn primary sm" type="submit">保存授权（刷新 7 天）</button>
+      </form>
+    </details>
+    <details class="subform-wrap">
+      <summary class="btn ghost sm">修改时间</summary>
+      <form method="post" action="/accounts/<%= a.id %>/time" class="form subform">
+        <div class="field">
+          <label>每日签到时间</label>
+          <input type="time" name="checkin_time" value="<%= a.checkin_time %>">
+        </div>
+        <button class="btn primary sm" type="submit">保存</button>
+      </form>
+    </details>
+    <form method="post" action="/accounts/<%= a.id %>/delete" class="inline-form"
+          onsubmit="return confirm('确定删除「<%= a.name %>」吗？相关记录也将删除。')">
+      <button class="btn danger sm" type="submit">删除</button>
+    </form>
+  </div>
+</div>
+<% }) %>
+
+<script>
+  (function () {
+    var sel = document.getElementById('platformSelect');
+    if (!sel) return;
+    function toggle() {
+      document.querySelectorAll('.cred-fields').forEach(function (d) {
+        d.hidden = d.getAttribute('data-platform') !== sel.value;
+      });
+    }
+    sel.addEventListener('change', toggle);
+    toggle();
+  })();
+</script>
+
+<%- include('partials/footer') %>

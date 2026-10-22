@@ -1,0 +1,50 @@
+name: ai-checkin
+
+services:
+  ai-checkin:
+    container_name: ai-checkin
+    build:
+      context: .
+      args:
+        # 国内构建可用 https://registry.npmmirror.com 加速
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
+    image: ai-checkin:latest
+    restart: unless-stopped
+
+    # 可选：如需从文件读取变量，取消下一行注释并创建 .env 文件
+    # env_file:
+    #   - .env
+
+    environment:
+      # 容器内监听端口（与下面的映射保持一致）
+      INTERNAL_PORT: ${INTERNAL_PORT:-3000}
+      # 容器系统时区
+      TZ: ${TZ:-Asia/Shanghai}
+      # SQLite 数据目录（需与 volumes 目标路径一致）
+      DATA_DIR: /app/data
+      NODE_ENV: production
+
+    ports:
+      # 外部端口:内部端口，两个端口均可自定义
+      # 例：EXTERNAL_PORT=8080 INTERNAL_PORT=3000 docker compose up -d
+      - "${EXTERNAL_PORT:-3000}:${INTERNAL_PORT:-3000}"
+
+    volumes:
+      # SQLite 数据库持久化到宿主机 ./data 目录，备份时直接复制该目录
+      - ./data:/app/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:'+(process.env.INTERNAL_PORT||3000)+'/login',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    security_opt:
+      - no-new-privileges:true

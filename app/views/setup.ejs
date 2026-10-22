@@ -1,0 +1,53 @@
+<%- include('partials/header') %>
+
+<div class="auth-wrap">
+  <div class="card auth-card">
+    <h1 class="auth-title">系统初始化</h1>
+    <p class="auth-sub">首次使用请设置管理员账号与站点参数，完成后即可开始使用。</p>
+    <form method="post" action="/setup" class="form">
+      <div class="field">
+        <label>站点名称</label>
+        <input type="text" name="site_name" value="AI 签到助手" maxlength="32" required>
+      </div>
+      <div class="field">
+        <label>管理员用户名</label>
+        <input type="text" name="username" maxlength="32" placeholder="2-32 个字符" required>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>管理员密码</label>
+          <input type="password" name="password" minlength="6" placeholder="至少 6 位" required>
+        </div>
+        <div class="field">
+          <label>确认密码</label>
+          <input type="password" name="password2" minlength="6" required>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>默认每日签到时间</label>
+          <input type="time" name="default_checkin_time" value="08:00" required>
+        </div>
+        <div class="field">
+          <label>时区（IANA 格式）</label>
+          <input type="text" name="timezone" value="Asia/Shanghai" required>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>内部端口（容器内监听）</label>
+          <input type="number" name="internal_port" value="<%= internalPort %>" min="1" max="65535" required>
+        </div>
+        <div class="field">
+          <label>外部端口（宿主机映射）</label>
+          <input type="number" name="external_port" placeholder="如 8080" min="1" max="65535">
+        </div>
+      </div>
+      <p class="hint">端口说明：实际生效需要与 Docker 端口映射一致（<code>-p 外部端口:内部端口</code>），修改后需重建容器。</p>
+      <label class="check-line"><input type="checkbox" name="allow_register" value="1"> 开放用户注册（多用户使用）</label>
+      <button class="btn primary block" type="submit">完成初始化</button>
+    </form>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

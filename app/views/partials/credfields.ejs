@@ -1,0 +1,15 @@
+<%# 平台凭据字段组，参数：adapter %>
+<% adapter.fields.forEach(f => { %>
+  <div class="field">
+    <label><%= f.label %><% if (f.required) { %> <span class="req">*</span><% } %></label>
+    <% if (f.type === 'textarea') { %>
+      <textarea name="f_<%= f.key %>" rows="3" placeholder="<%= f.placeholder || '' %>"></textarea>
+    <% } else if (f.type === 'select') { %>
+      <select name="f_<%= f.key %>">
+        <% (f.options || []).forEach(o => { %><option value="<%= o %>"><%= o %></option><% }) %>
+      </select>
+    <% } else { %>
+      <input type="text" name="f_<%= f.key %>" placeholder="<%= f.placeholder || '' %>">
+    <% } %>
+  </div>
+<% }) %>

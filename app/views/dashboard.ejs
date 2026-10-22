@@ -1,0 +1,60 @@
+<%- include('partials/header') %>
+
+<div class="page-head">
+  <h1>仪表盘</h1>
+  <a href="/accounts" class="btn primary">+ 添加平台账号</a>
+</div>
+
+<div class="stats">
+  <div class="stat card"><div class="stat-num"><%= stats.total %></div><div class="stat-label">平台账号</div></div>
+  <div class="stat card"><div class="stat-num ok"><%= stats.active %></div><div class="stat-label">活跃授权</div></div>
+  <div class="stat card"><div class="stat-num"><%= stats.todayDone %></div><div class="stat-label">今日已签</div></div>
+  <div class="stat card"><div class="stat-num <%= stats.expired > 0 ? 'err' : '' %>"><%= stats.expired %></div><div class="stat-label">待重新授权</div></div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <h2 class="card-title">今日签到安排</h2>
+    <% if (upcoming.length === 0) { %>
+      <p class="empty">暂无活跃授权的账号，<a href="/accounts">去添加</a></p>
+    <% } else { %>
+      <ul class="list">
+        <% upcoming.forEach(a => { %>
+        <li>
+          <div>
+            <span class="pill"><%= a.platformName %></span>
+            <strong><%= a.name %></strong>
+          </div>
+          <div class="muted">
+            每日 <%= a.checkin_time %>
+            <% if (a.daysLeft !== null) { %> · 授权剩 <%= a.daysLeft %> 天<% } %>
+          </div>
+        </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </div>
+
+  <div class="card">
+    <h2 class="card-title">最近签到记录 <a class="link-more" href="/logs">全部 →</a></h2>
+    <% if (recentLogs.length === 0) { %>
+      <p class="empty">暂无签到记录</p>
+    <% } else { %>
+      <table class="table">
+        <thead><tr><th>时间</th><th>平台</th><th>结果</th></tr></thead>
+        <tbody>
+          <% recentLogs.forEach(l => { %>
+          <tr>
+            <td class="muted nowrap"><%= l.created_at %></td>
+            <td><span class="pill"><%= l.platformName %></span></td>
+            <td><span class="chip <%= l.success ? 'ok' : 'err' %>"><%= l.success ? '成功' : '失败' %></span>
+              <span class="muted small"><%= (l.message || '').slice(0, 40) %></span></td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

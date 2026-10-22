@@ -1,0 +1,36 @@
+<%- include('partials/header') %>
+
+<div class="page-head">
+  <h1>通知</h1>
+  <form method="post" action="/notifications/read-all" class="inline-form">
+    <button class="btn ghost sm" type="submit">全部标为已读</button>
+  </form>
+</div>
+
+<% if (list.length === 0) { %>
+  <div class="card"><p class="empty">暂无通知</p></div>
+<% } %>
+
+<% list.forEach(n => { %>
+<div class="card notif-card <%= n.is_read ? '' : 'unread' %>">
+  <div class="notif-head">
+    <div>
+      <span class="chip <%= n.type === 'session_expired' ? 'err' : (n.type === 'checkin_failed' ? 'warn' : 'info') %>">
+        <%= n.type === 'session_expired' ? '授权过期' : (n.type === 'checkin_failed' ? '签到失败' : '系统') %>
+      </span>
+      <strong><%= n.title %></strong>
+    </div>
+    <div class="notif-side">
+      <span class="muted small"><%= n.created_at %></span>
+      <% if (!n.is_read) { %>
+      <form method="post" action="/notifications/<%= n.id %>/read" class="inline-form">
+        <button class="btn ghost sm" type="submit">标为已读</button>
+      </form>
+      <% } %>
+    </div>
+  </div>
+  <% if (n.content) { %><p class="notif-content"><%= n.content %></p><% } %>
+</div>
+<% }) %>
+
+<%- include('partials/footer') %>

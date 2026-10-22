@@ -1,0 +1,24 @@
+<%- include('partials/header') %>
+
+<div class="auth-wrap">
+  <div class="card auth-card">
+    <h1 class="auth-title">登录</h1>
+    <p class="auth-sub"><%= siteName %></p>
+    <form method="post" action="/login" class="form">
+      <div class="field">
+        <label>用户名</label>
+        <input type="text" name="username" required autofocus>
+      </div>
+      <div class="field">
+        <label>密码</label>
+        <input type="password" name="password" required>
+      </div>
+      <button class="btn primary block" type="submit">登 录</button>
+    </form>
+    <% if (allowRegister) { %>
+      <p class="auth-foot">还没有账号？<a href="/register">注册新用户</a></p>
+    <% } %>
+  </div>
+</div>
+
+<%- include('partials/footer') %>
