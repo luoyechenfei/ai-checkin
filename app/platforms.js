@@ -143,14 +143,14 @@ const REGISTRY = {
     defaultUrl: 'https://api.trae.cn/trae/api/v2/ug/checkin_credits/claim',
     statusUrl: 'https://api.trae.cn/trae/api/v2/ug/checkin_credits/status',
     buildRequest(cred) {
-      const headers = { 'User-Agent': UA, 'Content-Type': 'application/json' };
+      const headers = { 'User-Agent': UA, 'Content-Type': 'application/json', 'Origin': 'https://www.trae.cn', 'Referer': 'https://www.trae.cn/' };
       if (cred.token) headers['Authorization'] = `Cloud-IDE-JWT ${cred.token}`;
       if (cred.device_id) headers['x-device-id'] = cred.device_id;
       if (cred.region) headers['X-User-Region'] = cred.region;
       return { url: this.defaultUrl, method: 'POST', headers, body: '{"req_source":1}' };
     },
     buildStatusRequest(cred) {
-      const headers = { 'User-Agent': UA, 'Content-Type': 'application/json' };
+      const headers = { 'User-Agent': UA, 'Content-Type': 'application/json', 'Origin': 'https://www.trae.cn', 'Referer': 'https://www.trae.cn/' };
       if (cred.token) headers['Authorization'] = `Cloud-IDE-JWT ${cred.token}`;
       if (cred.device_id) headers['x-device-id'] = cred.device_id;
       if (cred.region) headers['X-User-Region'] = cred.region;

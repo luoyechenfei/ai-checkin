@@ -16,7 +16,9 @@ function collectCredentials(req, platformId) {
   if (!adapter) return null;
   const cred = {};
   for (const f of adapter.fields) {
-    const v = (req.body[`f_${f.key}`] || '').trim();
+    const raw = req.body[`f_${f.key}`];
+    // 值可能是数组（同名字段重复提交）或非字符串，统一转字符串再 trim
+    const v = String(Array.isArray(raw) ? raw[raw.length - 1] : (raw ?? '')).trim();
     if (f.required && !v) return null;
     if (v) cred[f.key] = v;
   }

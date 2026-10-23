@@ -111,6 +111,19 @@ services:
 
 **Token 获取通用方法**：登录对应平台客户端或网页版 → F12 开发者工具 → Network 面板 → 找任意已登录请求，复制其 `Authorization` 头中的 Token 值。
 
+**Trae Token 获取步骤（已实测验证）**：
+
+1. 浏览器打开 [www.trae.cn](https://www.trae.cn) 并登录（与客户端同一账号）
+2. 按 `F12` 打开开发者工具 → 切到 **Network（网络）** 面板，过滤框输入 `api.trae.cn`
+3. 按 `F5` 刷新页面，列表会出现 `cn_credits_billing_status` 等请求
+4. 点击该请求 → **Headers** → **Request Headers** → 复制 `Authorization: Cloud-IDE-JWT` 后面的整串 Token
+5. 填入本系统 Trae 账号的「JWT Token」字段即可
+
+> **注意**：
+> - 网页版 Local Storage 里的 `Cloud-IDE-Token` **不可用**（接口返回 code=1001 无法认证），必须从请求头的 `Cloud-IDE-JWT` 取
+> - Trae 客户端使用自研网络通道，客户端内 DevTools 的 Network 面板抓不到请求，请用浏览器网页版操作
+> - 该会话 Token 有效期约 **12 小时**，失效后按上述步骤重新获取即可；失效时系统会记录失败并通知
+
 ### 各平台说明
 
 - **Trae**：调用 `api.trae.cn` 签到接口；若返回「本设备今日已有账号签到」（code=9095）说明当日已签
