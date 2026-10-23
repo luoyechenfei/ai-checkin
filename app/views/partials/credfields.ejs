@@ -1,4 +1,9 @@
 <%# 平台凭据字段组，参数：adapter %>
+<% if (adapter.help) { %>
+  <div class="field">
+    <p class="hint" style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(59,130,246,.08);color:#2563eb;font-size:12px;line-height:1.6;"><%= adapter.help %></p>
+  </div>
+<% } %>
 <% adapter.fields.forEach(f => { %>
   <div class="field">
     <label><%= f.label %><% if (f.required) { %> <span class="req">*</span><% } %></label>

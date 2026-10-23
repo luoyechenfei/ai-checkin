@@ -135,6 +135,7 @@ const REGISTRY = {
     id: 'trae',
     name: 'Trae',
     desc: 'Trae AI IDE（字节跳动）',
+    help: '获取 Token：浏览器打开 www.trae.cn 并登录 → F12 开发者工具 → Network（网络）面板 → 过滤 api.trae.cn → 按 F5 刷新 → 点击 cn_credits_billing_status 等请求 → Headers → Request Headers → 复制 Authorization: Cloud-IDE-JWT 后面的整串。注意：Local Storage 中的 Cloud-IDE-Token 不可用；Token 有效期约 12 小时，失效后需重新获取。',
     fields: [
       { key: 'token', label: 'JWT Token', type: 'textarea', required: true, placeholder: '从 Trae 客户端提取的 Cloud-IDE-JWT Token' },
       { key: 'device_id', label: '设备 ID（可选）', type: 'text', required: false, placeholder: '设备 ID，部分接口可能需要' },
