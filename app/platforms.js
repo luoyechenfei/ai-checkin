@@ -200,9 +200,10 @@ const REGISTRY = {
     id: 'workbuddy',
     name: 'WorkBuddy',
     desc: '腾讯 WorkBuddy AI 编程助手（桌面端）',
+    help: '获取 Access Token：WorkBuddy 是 Electron 应用，Token 加密保存在内存中，需抓包获取。①完全退出 WorkBuddy 客户端；②命令行带调试端口启动："D:\\WorkBuddy\\WorkBuddy.exe" --remote-debugging-port=9223（路径按实际安装位置）；③打开 http://127.0.0.1:9223 进入调试页（或用支持 CDP 的工具连接），开启 Network 监听后刷新/操作客户端，从任意 www.workbuddy.cn/v2 请求的 Headers 中复制 Authorization: Bearer 后面的整串填入。Token 为 Keycloak JWT，有效期约 28 天；用户 ID 即 JWT 载荷中的 sub 字段（99494ddb- 开头的 UUID），可不填。',
     fields: [
-      { key: 'access_token', label: 'Access Token', type: 'password', required: true, placeholder: '从 WorkBuddy 桌面端获取的 accessToken（Bearer Token）' },
-      { key: 'uid', label: '用户 ID（可选）', type: 'text', required: false, placeholder: '用户 ID，部分接口可能需要' },
+      { key: 'access_token', label: 'Access Token', type: 'password', required: true, placeholder: '从 WorkBuddy 客户端抓包获取的 Bearer Token' },
+      { key: 'uid', label: '用户 ID（可选）', type: 'text', required: false, placeholder: 'JWT 载荷中的 sub 字段（UUID），一般可留空' },
       { key: 'domain', label: '域名（可选）', type: 'select', required: false, options: ['https://www.workbuddy.cn', 'https://www.codebuddy.cn'], placeholder: '默认 https://www.workbuddy.cn' }
     ],
     defaultUrl: 'https://www.workbuddy.cn/v2/billing/meter/daily-checkin',

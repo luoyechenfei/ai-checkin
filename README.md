@@ -124,6 +124,22 @@ services:
 > - Trae 客户端使用自研网络通道，客户端内 DevTools 的 Network 面板抓不到请求，请用浏览器网页版操作
 > - 该会话 Token 有效期约 **12 小时**，失效后按上述步骤重新获取即可；失效时系统会记录失败并通知
 
+**WorkBuddy Access Token 获取步骤（已实测验证）**：
+
+WorkBuddy 是 Electron 桌面应用，Token 加密保存在客户端内存中（磁盘上为密文），只能通过抓包获取：
+
+1. 完全退出 WorkBuddy 客户端（托盘图标也要退出）
+2. 命令行带调试端口启动（路径按实际安装位置）：
+   ```powershell
+   "D:\WorkBuddy\WorkBuddy.exe" --remote-debugging-port=9223
+   ```
+3. 用 CDP 工具（或浏览器打开 `http://127.0.0.1:9223`）连接调试端口，开启 Network 监听
+4. 在客户端内任意操作（或刷新页面），找到发往 `www.workbuddy.cn/v2/...` 的请求
+5. 复制请求头 `Authorization: Bearer` 后面的整串 Token 填入本系统
+6. 「用户 ID」为 Token 载荷中的 `sub` 字段（UUID），一般可留空
+
+> **注意**：该 Token 为 Keycloak JWT，有效期约 **28 天**，远长于 Trae 的会话 Token，配置一次可稳定使用较久。
+
 ### 各平台说明
 
 - **Trae**：调用 `api.trae.cn` 签到接口；若返回「本设备今日已有账号签到」（code=9095）说明当日已签
