@@ -6,9 +6,21 @@ const { db, getSetting, getNow } = require('../db');
 const { REGISTRY, platformOptions } = require('../platforms');
 const { daysLeft } = require('../util');
 const { requireAuth, requireAdmin } = require('../security');
+const captcha = require('../captcha');
+
+const PER_PAGE = 50;
 
 function unreadCount(userId) {
   return db.prepare('SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND is_read = 0').get(userId).c;
+}
+
+/** 计算分页信息（每页默认 50 条） */
+function pageInfo(req, total, perPage = PER_PAGE) {
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  let page = parseInt(req.query.page, 10) || 1;
+  if (page < 1) page = 1;
+  if (page > pages) page = pages;
+  return { page, pages, perPage, total, offset: (page - 1) * perPage };
 }
 
 /** 统一渲染：注入公共模板变量 */
@@ -17,6 +29,7 @@ function render(req, res, view, locals = {}) {
     user: req.user,
     siteName: getSetting('site_name', 'AI 签到助手'),
     unread: req.user ? unreadCount(req.user.id) : 0,
+    themeMode: req.user ? (req.user.theme || 'auto') : 'auto',
     msg: req.query.msg || null,
     msgType: req.query.type === 'err' ? 'err' : 'ok'
   }, locals));
@@ -54,11 +67,29 @@ router.get('/setup', (req, res) => {
   });
 });
 
+// ---------- 验证码 ----------
+router.get('/captcha/new', (req, res) => {
+  const c = captcha.create();
+  res.set('Cache-Control', 'no-store');
+  res.json({ id: c.id, svg: captcha.svg(c.code) });
+});
+
+router.get('/captcha/:id.svg', (req, res) => {
+  const item = captcha.get(req.params.id);
+  if (!item) {
+    res.status(404).set('Cache-Control', 'no-store').type('text/plain').send('验证码已过期，请点击刷新');
+    return;
+  }
+  res.set('Cache-Control', 'no-store');
+  res.type('image/svg+xml').send(captcha.svg(item.code));
+});
+
 // ---------- 登录 / 注册 ----------
 router.get('/login', (req, res) => {
   if (req.user) return res.redirect('/dashboard');
   const allowRegister = getSetting('allow_register', '0') === '1';
-  render(req, res, 'login', { title: '登录', allowRegister });
+  const c = captcha.create();
+  render(req, res, 'login', { title: '登录', allowRegister, captchaId: c.id });
 });
 
 router.get('/register', (req, res) => {
@@ -66,7 +97,8 @@ router.get('/register', (req, res) => {
   if (getSetting('allow_register', '0') !== '1') {
     return res.redirect('/login?msg=' + encodeURIComponent('当前未开放注册，请联系管理员') + '&type=err');
   }
-  render(req, res, 'register', { title: '注册' });
+  const c = captcha.create();
+  render(req, res, 'register', { title: '注册', captchaId: c.id });
 });
 
 // ---------- 仪表盘 ----------
@@ -132,19 +164,31 @@ router.get('/accounts', requireAuth, (req, res) => {
 router.get('/logs', requireAuth, (req, res) => {
   const platform = req.query.platform || '';
   const status = req.query.status || '';
-  let sql = `SELECT l.*, a.name AS account_name FROM logs l
-             LEFT JOIN accounts a ON a.id = l.account_id WHERE l.user_id = ?`;
+  let where = 'WHERE l.user_id = ?';
   const params = [req.user.id];
-  if (platform) { sql += ' AND platform = ?'; params.push(platform); }
-  if (status === 'ok') sql += ' AND success = 1';
-  if (status === 'fail') sql += ' AND success = 0';
-  sql += ' ORDER BY id DESC LIMIT 200';
-  const logs = db.prepare(sql).all(...params)
+  if (platform) { where += ' AND l.platform = ?'; params.push(platform); }
+  if (status === 'ok') where += ' AND l.success = 1';
+  if (status === 'fail') where += ' AND l.success = 0';
+
+  const total = db.prepare(`SELECT COUNT(*) AS c FROM logs l ${where}`).get(...params).c;
+  const p = pageInfo(req, total);
+  const logs = db.prepare(
+    `SELECT l.*, a.name AS account_name FROM logs l
+     LEFT JOIN accounts a ON a.id = l.account_id
+     ${where} ORDER BY l.id DESC LIMIT ? OFFSET ?`).all(...params, p.perPage, p.offset)
     .map(l => Object.assign({}, l, { platformName: platformName(l.platform) }));
+
+  // 分页链接保留筛选条件
+  const qs = [];
+  if (platform) qs.push('platform=' + encodeURIComponent(platform));
+  if (status) qs.push('status=' + encodeURIComponent(status));
+
   render(req, res, 'logs', {
     title: '签到记录', logs,
     filterPlatform: platform, filterStatus: status,
-    platforms: platformOptions()
+    platforms: platformOptions(),
+    page: p.page, pages: p.pages, total, perPage: p.perPage,
+    queryBase: qs.length ? '&' + qs.join('&') : ''
   });
 });
 
@@ -176,6 +220,46 @@ router.get('/admin', requireAuth, requireAdmin, (req, res) => {
     ORDER BY a.id DESC LIMIT 100`).all()
     .map(a => decorateAccount(a, now));
   render(req, res, 'admin', { title: '管理后台', users, settings: s, accounts, registry: REGISTRY });
+});
+
+// ---------- 管理后台：操作日志（仅管理员） ----------
+router.get('/admin/logs', requireAuth, requireAdmin, (req, res) => {
+  const q = (req.query.q || '').trim();
+  const action = (req.query.action || '').trim();
+  const conds = [];
+  const params = [];
+  if (q) {
+    conds.push('(username LIKE ? OR detail LIKE ? OR ip LIKE ?)');
+    params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+  }
+  if (action) { conds.push('action = ?'); params.push(action); }
+  const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+
+  const total = db.prepare(`SELECT COUNT(*) AS c FROM audit_logs ${where}`).get(...params).c;
+  const p = pageInfo(req, total);
+  const rows = db.prepare(
+    `SELECT * FROM audit_logs ${where} ORDER BY id DESC LIMIT ? OFFSET ?`)
+    .all(...params, p.perPage, p.offset);
+  const actions = db.prepare(
+    'SELECT action, COUNT(*) AS c FROM audit_logs GROUP BY action ORDER BY c DESC').all();
+  const qs = [];
+  if (q) qs.push('q=' + encodeURIComponent(q));
+  if (action) qs.push('action=' + encodeURIComponent(action));
+
+  render(req, res, 'admin-logs', {
+    title: '操作日志',
+    rows, actions,
+    q, filterAction: action,
+    page: p.page, pages: p.pages, total, perPage: p.perPage,
+    queryBase: qs.length ? '&' + qs.join('&') : ''
+  });
+});
+
+// ---------- 管理后台：系统通知（仅管理员） ----------
+router.get('/admin/notifications', requireAuth, requireAdmin, (req, res) => {
+  const broadcasts = db.prepare('SELECT * FROM broadcasts ORDER BY id DESC LIMIT 100').all();
+  const userCount = db.prepare(`SELECT COUNT(*) AS c FROM users WHERE status = 'active'`).get().c;
+  render(req, res, 'admin-notifications', { title: '系统通知', broadcasts, userCount });
 });
 
 module.exports = router;

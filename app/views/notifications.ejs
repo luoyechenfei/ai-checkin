@@ -15,8 +15,8 @@
 <div class="card notif-card <%= n.is_read ? '' : 'unread' %>">
   <div class="notif-head">
     <div>
-      <span class="chip <%= n.type === 'session_expired' ? 'err' : (n.type === 'checkin_failed' ? 'warn' : 'info') %>">
-        <%= n.type === 'session_expired' ? '授权过期' : (n.type === 'checkin_failed' ? '签到失败' : '系统') %>
+      <span class="chip <%= n.type === 'session_expired' || n.level === 'err' ? 'err' : (n.type === 'checkin_failed' || n.level === 'warn' ? 'warn' : 'info') %>">
+        <%= n.type === 'session_expired' ? '授权过期' : (n.type === 'checkin_failed' ? '签到失败' : (n.level === 'err' ? '紧急通知' : (n.level === 'warn' ? '重要通知' : '系统'))) %>
       </span>
       <strong><%= n.title %></strong>
     </div>

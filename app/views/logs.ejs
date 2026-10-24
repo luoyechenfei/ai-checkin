@@ -22,25 +22,60 @@
   <% if (logs.length === 0) { %>
     <p class="empty">暂无记录</p>
   <% } else { %>
-  <div class="table-wrap">
-  <table class="table">
-    <thead><tr><th>时间</th><th>平台</th><th>账号</th><th>结果</th><th>积分</th><th>消息</th></tr></thead>
-    <tbody>
-      <% logs.forEach(l => { %>
-      <tr>
-        <td class="muted nowrap"><%= l.created_at %></td>
-        <td><span class="pill"><%= l.platformName %></span></td>
-        <td><%= l.account_name || '-' %></td>
-        <td><span class="chip <%= l.success ? 'ok' : 'err' %>"><%= l.success ? '成功' : '失败' %></span></td>
-        <td class="nowrap"><%= l.points > 0 ? '+' + l.points : (l.success ? '0' : '-') %></td>
-        <td class="msg-cell"><%= l.message || '' %></td>
-      </tr>
-      <% }) %>
-    </tbody>
-  </table>
+  <form method="post" action="/logs/delete" id="logsForm">
+    <div class="bulk-bar">
+      <label class="check-line"><input type="checkbox" id="checkAll"> 全选本页</label>
+      <span class="muted small">共 <%= total %> 条 · 每页 <%= perPage %> 条 · 第 <%= page %>/<%= pages %> 页</span>
+      <button class="btn danger sm" type="submit"
+              onclick="return confirm('确定删除选中的签到记录吗？删除后不可恢复。')">批量删除</button>
+    </div>
+    <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th class="check-col"></th><th>时间</th><th>平台</th><th>账号</th><th>结果</th><th>积分</th><th>消息</th><th>操作</th></tr></thead>
+      <tbody>
+        <% logs.forEach(l => { %>
+        <tr>
+          <td class="check-col"><input type="checkbox" name="ids" value="<%= l.id %>" class="row-check" aria-label="选择记录"></td>
+          <td class="muted nowrap"><%= l.created_at %></td>
+          <td><span class="pill"><%= l.platformName %></span></td>
+          <td><%= l.account_name || '-' %></td>
+          <td><span class="chip <%= l.success ? 'ok' : 'err' %>"><%= l.success ? '成功' : '失败' %></span></td>
+          <td class="nowrap"><%= l.points > 0 ? '+' + l.points : (l.success ? '0' : '-') %></td>
+          <td class="msg-cell"><%= l.message || '' %></td>
+          <td>
+            <button type="submit" class="btn danger sm" formaction="/logs/<%= l.id %>/delete"
+                    onclick="return confirm('确定删除这条记录吗？')">删除</button>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    </div>
+  </form>
+  <% if (pages > 1) { %>
+  <div class="pager">
+    <% if (page > 1) { %><a class="btn ghost sm" href="/logs?page=<%= page - 1 %><%= queryBase %>">上一页</a><% } %>
+    <span class="muted small">第 <%= page %> / <%= pages %> 页，共 <%= total %> 条</span>
+    <% if (page < pages) { %><a class="btn ghost sm" href="/logs?page=<%= page + 1 %><%= queryBase %>">下一页</a><% } %>
   </div>
-  <p class="muted small">最多显示最近 200 条</p>
+  <% } %>
   <% } %>
 </div>
+
+<script>
+  (function () {
+    var all = document.getElementById('checkAll');
+    if (!all) return;
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('.row-check'));
+    all.addEventListener('change', function () {
+      boxes.forEach(function (b) { b.checked = all.checked; });
+    });
+    boxes.forEach(function (b) {
+      b.addEventListener('change', function () {
+        all.checked = boxes.every(function (x) { return x.checked; });
+      });
+    });
+  })();
+</script>
 
 <%- include('partials/footer') %>

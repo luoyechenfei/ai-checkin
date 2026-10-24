@@ -52,14 +52,19 @@ function attachUser(req, res, next) {
   const token = req.cookies && req.cookies[config.SESSION_COOKIE];
   if (token) {
     const row = db.prepare(`
-      SELECT u.id, u.username, u.is_admin, u.status, s.expires_at
+      SELECT u.id, u.username, u.is_admin, u.status, u.theme, s.expires_at
       FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token = ?`).get(token);
     if (row) {
       if (row.status !== 'active' || row.expires_at <= getNow()) {
         db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
       } else {
-        req.user = { id: row.id, username: row.username, isAdmin: !!row.is_admin };
+        req.user = {
+          id: row.id,
+          username: row.username,
+          isAdmin: !!row.is_admin,
+          theme: row.theme || 'auto'
+        };
       }
     }
   }

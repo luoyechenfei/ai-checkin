@@ -1,0 +1,12 @@
+<%# 图形验证码，参数：captchaId %>
+<div class="field">
+  <label>验证码 <span class="req">*</span></label>
+  <div class="captcha-row">
+    <input type="text" name="captcha_code" maxlength="6" placeholder="输入图中 4 位字符" required autocomplete="off" spellcheck="false">
+    <span class="captcha-box" id="captchaBox" title="点击刷新验证码">
+      <img src="/captcha/<%= captchaId %>.svg" alt="点击刷新验证码" width="120" height="44">
+    </span>
+  </div>
+  <input type="hidden" name="captcha_id" id="captchaId" value="<%= captchaId %>">
+  <p class="hint">看不清？点击图片刷新（有效期 5 分钟）</p>
+</div>

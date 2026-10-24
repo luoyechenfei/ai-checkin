@@ -364,6 +364,7 @@ const REGISTRY = {
     id: 'zcode',
     name: 'ZCode',
     desc: '智谱 Z.ai 编程客户端',
+    help: '获取 JWT Token（已按接口行为验证）：①登录 ZCode 客户端（zcode.z.ai）或浏览器打开 https://z.ai 并使用同一账号登录；②浏览器按 F12 → Network（网络）→ 过滤 zcode.z.ai，按 F5 刷新页面或触发任意套餐/计费操作；③点击任一发往 zcode.z.ai 的请求 → Headers → Request Headers，复制 Authorization: Bearer 后面的整串 JWT；④填入「JWT Token」即可。设备 MID 可在同一请求头 X-Device-Mid 中找到（可不填），应用版本默认 1.0.0。Token 随登录会话失效，失效后系统会提示重新授权。',
     fields: [
       { key: 'jwt_token', label: 'JWT Token', type: 'textarea', required: true, placeholder: '从 ZCode 客户端提取的 JWT Token' },
       { key: 'device_mid', label: '设备 MID（可选）', type: 'text', required: false, placeholder: '设备 MID，部分接口可能需要' },
@@ -466,6 +467,7 @@ const REGISTRY = {
     id: 'qoder',
     name: 'Qoder',
     desc: '阿里 Qoder AI 编程 IDE',
+    help: '获取 Access Token（已按接口行为验证）：①安装并登录 Qoder CN 客户端，或浏览器打开 https://qoder.com.cn 登录同一账号；②按 F12 → Network（网络）→ 过滤 openapi.qoder.com.cn；③按 F5 刷新后点击任意发往 openapi.qoder.com.cn 的请求 → Headers → Request Headers，复制 Authorization: Bearer 后面的整串 Token；④填入「Access Token」即可，「Refresh Token」可留空。注意：Qoder 每日 10:00（UTC+8）后才刷新当日额度，建议把签到时间设置在 10:00 之后；未登录/Token 失效时接口返回 401，系统会自动标记授权失效并提示重新授权。',
     fields: [
       { key: 'token', label: 'Access Token', type: 'textarea', required: true, placeholder: '从 Qoder CN 客户端提取的 Access Token' },
       { key: 'refresh_token', label: 'Refresh Token（可选）', type: 'textarea', required: false, placeholder: 'Refresh Token，用于自动续期' }

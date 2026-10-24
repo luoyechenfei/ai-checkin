@@ -1,0 +1,101 @@
+<%- include('partials/header') %>
+
+<div class="page-head"><h1>系统通知</h1></div>
+
+<div class="admin-nav">
+  <a class="btn ghost sm" href="/admin">全局设置与用户</a>
+  <a class="btn ghost sm" href="/admin/logs">操作日志</a>
+  <a class="btn ghost sm active" href="/admin/notifications">系统通知</a>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <h2 class="card-title">发布全局通知</h2>
+    <form method="post" action="/admin/broadcasts" class="form">
+      <div class="field">
+        <label>通知标题 <span class="req">*</span></label>
+        <input type="text" name="title" maxlength="80" placeholder="如：系统升级通知" required>
+      </div>
+      <div class="field">
+        <label>通知类型</label>
+        <select name="level">
+          <option value="info">普通通知（信息）</option>
+          <option value="warn">重要提醒（警告）</option>
+          <option value="err">紧急通知（错误）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>通知内容</label>
+        <textarea name="content" rows="5" placeholder="如：系统将于今晚 23:00 进行升级维护，预计持续 10 分钟，期间签到可能短暂失败。"></textarea>
+      </div>
+      <p class="hint">发布后将立即送达当前全部 <strong><%= userCount %></strong> 位活跃用户，并出现在其「通知」页面。</p>
+      <button class="btn primary" type="submit">发布全局通知</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 class="card-title">说明</h2>
+    <ul class="list">
+      <li><span>系统通知类型</span><span class="muted">普通 / 重要 / 紧急</span></li>
+      <li><span>接收范围</span><span class="muted">全部活跃用户</span></li>
+      <li><span>用户权限</span><span class="muted">仅可查看、标为已读</span></li>
+      <li><span>管理权限</span><span class="muted">仅管理员可发布 / 编辑 / 删除</span></li>
+    </ul>
+    <p class="hint">编辑通知内容会同步更新所有用户已收到的同一条通知；删除后该通知将从所有用户的通知列表中移除。可用于发布系统升级、维护公告、功能更新等。</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="card-title">已发布通知（<%= broadcasts.length %>）</h2>
+  <% if (broadcasts.length === 0) { %>
+    <p class="empty">尚未发布任何全局通知</p>
+  <% } else { %>
+    <% broadcasts.forEach(b => { %>
+    <div class="broadcast-item">
+      <div class="notif-head">
+        <div>
+          <span class="chip <%= b.level === 'err' ? 'err' : (b.level === 'warn' ? 'warn' : 'info') %>">
+            <%= b.level === 'err' ? '紧急' : (b.level === 'warn' ? '重要' : '普通') %>
+          </span>
+          <strong><%= b.title %></strong>
+          <span class="muted small">送达 <%= b.recipients %> 人</span>
+        </div>
+        <div class="notif-side">
+          <span class="muted small"><%= b.created_at %><% if (b.updated_at) { %> · 已编辑<% } %></span>
+        </div>
+      </div>
+      <% if (b.content) { %><p class="notif-content"><%= b.content %></p><% } %>
+      <div class="op-group" style="margin-top:10px;">
+        <details class="subform-wrap">
+          <summary class="btn ghost sm">编辑</summary>
+          <form method="post" action="/admin/broadcasts/<%= b.id %>" class="form subform">
+            <div class="field">
+              <label>标题</label>
+              <input type="text" name="title" value="<%= b.title %>" maxlength="80" required>
+            </div>
+            <div class="field">
+              <label>类型</label>
+              <select name="level">
+                <option value="info" <%= b.level === 'info' ? 'selected' : '' %>>普通通知</option>
+                <option value="warn" <%= b.level === 'warn' ? 'selected' : '' %>>重要提醒</option>
+                <option value="err" <%= b.level === 'err' ? 'selected' : '' %>>紧急通知</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>内容</label>
+              <textarea name="content" rows="4"><%= b.content || '' %></textarea>
+            </div>
+            <button class="btn primary sm" type="submit">保存修改</button>
+          </form>
+        </details>
+        <form method="post" action="/admin/broadcasts/<%= b.id %>/delete" class="inline-form"
+              onsubmit="return confirm('确定删除通知「<%= b.title %>」吗？将从所有用户的通知列表中移除。')">
+          <button class="btn danger sm" type="submit">删除</button>
+        </form>
+      </div>
+    </div>
+    <% }) %>
+  <% } %>
+</div>
+
+<%- include('partials/footer') %>

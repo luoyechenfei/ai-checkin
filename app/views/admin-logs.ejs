@@ -1,0 +1,98 @@
+<%- include('partials/header') %>
+
+<% const ACTION_NAMES = {
+  setup: '系统初始化', login: '登录', login_failed: '登录失败', logout: '退出',
+  register: '注册', account_add: '添加账号', account_delete: '删除账号',
+  account_reauth: '重新授权', checkin_manual: '手动签到', log_delete: '删除签到记录',
+  settings_update: '修改设置', user_disable: '禁用用户', user_enable: '启用用户',
+  user_delete: '删除用户', user_resetpw: '重置密码', audit_delete: '删除日志',
+  audit_clear: '清空日志', broadcast_create: '发布通知', broadcast_update: '编辑通知',
+  broadcast_delete: '删除通知'
+}; %>
+
+<div class="page-head">
+  <h1>操作日志</h1>
+  <div class="head-actions">
+    <form method="get" action="/admin/logs" class="filter-form">
+      <input type="text" name="q" value="<%= q %>" placeholder="搜索用户 / 详情 / IP">
+      <select name="action">
+        <option value="">全部操作</option>
+        <% actions.forEach(a => { %>
+          <option value="<%= a.action %>" <%= filterAction === a.action ? 'selected' : '' %>><%= ACTION_NAMES[a.action] || a.action %>（<%= a.c %>）</option>
+        <% }) %>
+      </select>
+      <button class="btn ghost sm" type="submit">筛选</button>
+    </form>
+    <form method="post" action="/admin/logs/clear" class="inline-form"
+          onsubmit="return confirm('确定清空全部操作日志吗？此操作不可恢复。')">
+      <button class="btn danger sm" type="submit">清空日志</button>
+    </form>
+  </div>
+</div>
+
+<div class="admin-nav">
+  <a class="btn ghost sm" href="/admin">全局设置与用户</a>
+  <a class="btn ghost sm active" href="/admin/logs">操作日志</a>
+  <a class="btn ghost sm" href="/admin/notifications">系统通知</a>
+</div>
+
+<div class="card">
+  <% if (rows.length === 0) { %>
+    <p class="empty">暂无操作日志</p>
+  <% } else { %>
+  <form method="post" action="/admin/logs/delete">
+    <div class="bulk-bar">
+      <label class="check-line"><input type="checkbox" id="checkAll"> 全选本页</label>
+      <span class="muted small">共 <%= total %> 条 · 每页 <%= perPage %> 条 · 第 <%= page %>/<%= pages %> 页</span>
+      <button class="btn danger sm" type="submit"
+              onclick="return confirm('确定删除选中的操作日志吗？')">批量删除</button>
+    </div>
+    <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th class="check-col"></th><th>时间</th><th>用户</th><th>操作</th><th>详情</th><th>IP</th><th>操作</th></tr></thead>
+      <tbody>
+        <% rows.forEach(r => { %>
+        <tr>
+          <td class="check-col"><input type="checkbox" name="ids" value="<%= r.id %>" class="row-check" aria-label="选择日志"></td>
+          <td class="muted nowrap"><%= r.created_at %></td>
+          <td><%= r.username || '-' %></td>
+          <td><span class="pill"><%= ACTION_NAMES[r.action] || r.action %></span></td>
+          <td class="msg-cell"><%= r.detail || '' %></td>
+          <td class="muted nowrap"><%= r.ip || '-' %></td>
+          <td>
+            <button type="submit" class="btn danger sm" formaction="/admin/logs/<%= r.id %>/delete"
+                    onclick="return confirm('确定删除这条日志吗？')">删除</button>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    </div>
+  </form>
+  <% if (pages > 1) { %>
+  <div class="pager">
+    <% if (page > 1) { %><a class="btn ghost sm" href="/admin/logs?page=<%= page - 1 %><%= queryBase %>">上一页</a><% } %>
+    <span class="muted small">第 <%= page %> / <%= pages %> 页，共 <%= total %> 条</span>
+    <% if (page < pages) { %><a class="btn ghost sm" href="/admin/logs?page=<%= page + 1 %><%= queryBase %>">下一页</a><% } %>
+  </div>
+  <% } %>
+  <% } %>
+</div>
+
+<script>
+  (function () {
+    var all = document.getElementById('checkAll');
+    if (!all) return;
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('.row-check'));
+    all.addEventListener('change', function () {
+      boxes.forEach(function (b) { b.checked = all.checked; });
+    });
+    boxes.forEach(function (b) {
+      b.addEventListener('change', function () {
+        all.checked = boxes.every(function (x) { return x.checked; });
+      });
+    });
+  })();
+</script>
+
+<%- include('partials/footer') %>
