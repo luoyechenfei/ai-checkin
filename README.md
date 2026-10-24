@@ -8,7 +8,7 @@
 - **每日签到 + 活动领取双模式**：Trae / WorkBuddy / CodeBuddy 为每日签到；ZCode / Qoder 为活动领取制（Qoder 每日 10:00 后可领 100 Credits）
 - **每日定时签到**：每个账号可单独设置签到时间（默认 08:00），到点自动执行
 - **授权保持与自动登出**：平台授权登录后保持 **7 天**，到期自动登出（清除本地凭据）并通过站内通知提醒重新授权
-- **Trae OAuth 自动续期（可选）**：Trae 支持「OAuth 扫码授权」与「手动粘贴 Token」两种方式。OAuth 授权后系统保存 Refresh Token，Token 到期前自动续期，无需手动更新；手动方式保持原有 7 天登出规则不变
+- **自动续期（可选）**：Trae 支持「OAuth 扫码授权」自动获取 Refresh Token；WorkBuddy / CodeBuddy 支持手动填入 Refresh Token。开启后系统在 Token 到期前自动刷新，无需手动更新；未开启时保持原有 7 天登出规则不变
 - **多用户注册**：可开关的开放注册，每位用户独立管理自己的平台账号、记录与通知
 - **首次初始化向导**：首次访问自动进入初始化页，设置管理员账号密码、站点名称、默认签到时间、时区、端口等
 - **端口自定义**：内部端口（容器内监听）与外部端口（宿主机映射）均可自定义
@@ -111,9 +111,9 @@ services:
 
 | 平台 | 类型 | 认证方式 | 必填字段 | 可选字段 |
 |------|------|----------|----------|----------|
-| **Trae**（字节） | 每日签到 | `Authorization: Cloud-IDE-JWT {token}` | JWT Token | 设备 ID、用户区域 |
-| **WorkBuddy**（腾讯） | 每日签到 | `Authorization: Bearer {access_token}` | Access Token | 用户 ID、域名（可切换 workbuddy.cn / codebuddy.cn） |
-| **CodeBuddy**（腾讯） | 每日签到 | `Authorization: Bearer {access_token}` | Access Token | 用户 ID |
+| **Trae**（字节） | 每日签到 | `Authorization: Cloud-IDE-JWT {token}` | JWT Token | 设备 ID、用户区域、Refresh Token |
+| **WorkBuddy**（腾讯） | 每日签到 | `Authorization: Bearer {access_token}` | Access Token | 用户 ID、域名、Refresh Token |
+| **CodeBuddy**（腾讯） | 每日签到 | `Authorization: Bearer {access_token}` | Access Token | 用户 ID、Refresh Token |
 | **ZCode**（智谱 Z.ai） | 活动领取 | `Authorization: Bearer {jwt_token}` | JWT Token | 设备 MID、应用版本 |
 | **Qoder**（阿里） | 活动领取 | `Authorization: Bearer {token}` | Access Token | Refresh Token |
 
@@ -128,7 +128,9 @@ services:
 3. 页面自动跳转回本系统，Token 与 Refresh Token 已自动填入，勾选「启用自动续期」后提交即可
 4. 系统会在 Token 到期前自动刷新，无需手动更新
 
-> **注意**：OAuth 回调地址需为 `127.0.0.1` 或 `localhost`（Trae 平台限制）。本地部署可自动跳转；远程部署时授权页跳转可能无法到达，此时可改用「方式二」手动粘贴 Token。
+> **注意**：OAuth 回调地址需为 `127.0.0.1` 或 `localhost`（Trae 平台限制，远程地址会导致授权页报「网络错误」）。
+> - **本地部署**（127.0.0.1/localhost 访问）：授权后自动跳转回本系统，无需手动操作
+> - **远程/局域网部署**：授权后浏览器会跳到一个打不开的 localhost 地址，此时**复制浏览器地址栏的完整 URL**（含 `userJwt` 参数），粘贴回本系统的「解析回调」输入框，点击解析即可自动填充 Token 与 Refresh Token
 
 方式二：**手动粘贴 Token（有效期约 12 小时，到期需重新获取）**
 
@@ -160,6 +162,8 @@ WorkBuddy 是 Electron 桌面应用，Token 加密保存在客户端内存中（
 6. 「用户 ID」为 Token 载荷中的 `sub` 字段（UUID），一般可留空
 
 > **注意**：该 Token 为 Keycloak JWT，有效期约 **28 天**，远长于 Trae 的会话 Token，配置一次可稳定使用较久。
+>
+> **自动续期（可选）**：如需开启自动续期，请同时填入 Refresh Token。在 WorkBuddy 本地登录态文件中查找 `refreshToken` 字段（`%APPDATA%\workbuddy-desktop` 或应用数据目录下的 `.info`/`.json` 文件），复制 `refreshToken` 值填入「Refresh Token」字段，再勾选「启用自动续期」。系统会在 Token 到期前自动调用刷新接口续期，无需手动重新抓包。刷新接口为 `copilot.tencent.com/v2/plugin/auth/token/refresh`。
 
 **CodeBuddy Access Token 获取步骤**：
 
@@ -181,6 +185,8 @@ CodeBuddy 与 WorkBuddy 同为腾讯系、接口格式一致，优先使用网�
 ```
 
 浏览器打开 `http://127.0.0.1:9224`，开启 Network 监听，从发往 `www.codebuddy.cn/v2` 的请求头中复制 Token 即可。Token 有效期约 **28 天**。
+
+> **自动续期（可选）**：CodeBuddy 与 WorkBuddy 共用腾讯 copilot 刷新接口，自动续期方式相同。从 CodeBuddy 本地登录态文件（`%APPDATA%\codebuddy` 下的 `.info`/`.json`）中复制 `refreshToken` 值填入「Refresh Token」字段，勾选「启用自动续期」即可。
 
 **ZCode Token 获取步骤**：
 
