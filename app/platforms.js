@@ -143,6 +143,8 @@ const REGISTRY = {
     ],
     defaultUrl: 'https://api.trae.cn/trae/api/v2/ug/checkin_credits/claim',
     statusUrl: 'https://api.trae.cn/trae/api/v2/ug/checkin_credits/status',
+    // 领取接口不返回积分，签到成功后需再查状态接口获取当日积分
+    pointsFromStatus: true,
     buildRequest(cred) {
       const headers = { 'User-Agent': UA, 'Content-Type': 'application/json', 'Origin': 'https://www.trae.cn', 'Referer': 'https://www.trae.cn/' };
       if (cred.token) headers['Authorization'] = `Cloud-IDE-JWT ${cred.token}`;
@@ -173,8 +175,9 @@ const REGISTRY = {
         if (code === 0 || checkedIn) {
           return { success: true, points, message: withPoints('签到成功', points) };
         }
-        if (code === 9095) {
-          return { success: false, message: '本设备今日已有账号签到' };
+        if (code === 9095 || code === 9004) {
+          // 9004/9095：本设备当日已签过，视为今日已完成（不计为失败）
+          return { success: true, alreadyCheckedIn: true, message: '今日已签到' };
         }
         const msg = json.message || json.msg || '';
         return { success: false, message: msg || `签到失败(code=${code})` };
@@ -637,6 +640,28 @@ async function runCheckin(account, trigger) {
     result = { success: false, message: '请求异常：' + (err && err.message ? err.message : String(err)) };
   } finally {
     inFlight.delete(account.id);
+  }
+
+  // 部分平台（如 Trae）的领取接口不返回积分：签到成功后用状态接口补全当日积分
+  if (result.success && !result.alreadyCheckedIn &&
+      !(typeof result.points === 'number' && result.points > 0) &&
+      adapter.pointsFromStatus && typeof adapter.buildStatusRequest === 'function' &&
+      typeof adapter.parseStatusResponse === 'function') {
+    try {
+      const sreq = adapter.buildStatusRequest(cred);
+      const sres = await fetch(sreq.url, {
+        method: sreq.method,
+        headers: sreq.headers,
+        body: sreq.body,
+        signal: AbortSignal.timeout(10000)
+      });
+      const st = adapter.parseStatusResponse(sres.status, await sres.text());
+      const p = (st.credits || 0) + (st.extraCredits || 0);
+      if (p > 0) {
+        result.points = p;
+        result.message = `${result.message}，获得 ${p} 积分`;
+      }
+    } catch (e) { /* 积分补全失败不影响签到结果 */ }
   }
 
   // 写日志并更新账号状态
