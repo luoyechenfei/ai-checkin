@@ -302,22 +302,25 @@ router.post('/accounts/oauth/trae/url', requireAuth, (req, res) => {
   const device = traeGenDevice();
   const tempId = crypto.randomBytes(12).toString('hex');
   oauthTempStore.set(tempId, { device, expiresAt: Date.now() + 10 * 60 * 1000 });
-  // 回调地址优先级：管理后台手动配置 > 自动检测请求来源地址
+  // Trae 要求回调地址必须是 127.0.0.1/localhost，否则授权页报「网络错误」。
+  // 回调地址可在管理后台配置（仅限 localhost 地址），默认 http://127.0.0.1:39393/authorize
   const configuredBase = (getSetting('oauth_callback_base', '') || '').trim().replace(/\/+$/, '');
-  let origin = String(req.body.origin || req.headers.host || '').trim();
-  if (origin && !/^https?:\/\//i.test(origin)) origin = `http://${origin}`;
+  const isLocalConfigured = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(configuredBase);
+  const callbackBase = isLocalConfigured ? configuredBase : 'http://127.0.0.1:39393';
+  const callbackUrl = `${callbackBase}/authorize`;
 
-  let base = configuredBase || origin;
-  let seamless = !!base;
+  // seamless：用户从 localhost 访问时，回调可直接打回本应用，无需手动粘贴
+  const origin = String(req.body.origin || req.headers.host || '').trim();
+  const seamless = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(origin) ||
+                   /^(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin);
 
   // 回调 URL 必须干净（不能带 query/path 参数），否则 Trae 授权页会报「网络错误」；
-  // tempId 通过 cookie 传递，GET /authorize 时读取
-  const callbackUrl = base ? `${base}/authorize` : 'http://127.0.0.1:39393/authorize';
+  // seamless 模式下 tempId 通过 cookie 传递，GET /authorize 时读取
   if (seamless) {
     res.cookie('trae_oauth_temp', tempId, { httpOnly: true, maxAge: 10 * 60 * 1000, sameSite: 'lax' });
   }
   const url = REGISTRY.trae.getOAuthAuthUrl(device, callbackUrl);
-  res.json({ ok: true, tempId, url, seamless, callbackBase: base });
+  res.json({ ok: true, tempId, url, seamless, callbackBase });
 });
 
 // 共享：解析回调链接 + 设备绑定续期，返回 {ok, ...字段} 或 {ok:false, error}
