@@ -9,6 +9,8 @@ const app = express();
 app.disable('x-powered-by');
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
+// 模板中引用的静态资源版本号（用于样式表强制刷新，避免旧缓存导致主题不生效）
+app.locals.assetVersion = require('../package.json').version;
 
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
@@ -29,7 +31,12 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use('/public', express.static(path.join(__dirname, 'public'), { maxAge: '1d' }));
+// 静态资源走协商缓存：每次校验 ETag，避免样式更新后浏览器仍用旧缓存
+app.use('/public', express.static(path.join(__dirname, 'public'), {
+  etag: true,
+  lastModified: true,
+  setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache')
+}));
 
 app.use(attachUser);
 app.use(requireSetup);

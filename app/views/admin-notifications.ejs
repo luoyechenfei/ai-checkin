@@ -98,4 +98,71 @@
   <% } %>
 </div>
 
+<div class="card">
+  <h2 class="card-title">全部通知记录（共 <%= total %> 条）</h2>
+  <p class="hint">包含全局公告、欢迎通知、授权过期与签到失败提醒等全部通知，可按需逐条或批量删除。删除全局公告的单条记录只影响该用户的副本。</p>
+  <% if (notices.length === 0) { %>
+    <p class="empty">暂无通知记录</p>
+  <% } else { %>
+  <form method="post" action="/admin/notifications/delete">
+    <div class="head-actions" style="justify-content:space-between;margin-bottom:10px;">
+      <label class="muted small"><input type="checkbox" id="checkAllNotif"> 全选本页</label>
+      <div class="head-actions">
+        <span class="muted small">共 <%= total %> 条 · 每页 <%= perPage %> 条 · 第 <%= page %>/<%= pages %> 页</span>
+        <button class="btn danger sm" type="submit"
+                onclick="return confirm('确定删除选中的通知吗？')">批量删除</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th class="check-col"></th><th>时间</th><th>用户</th><th>类型</th><th>标题</th><th>状态</th><th>操作</th></tr></thead>
+      <tbody>
+        <% notices.forEach(n => { %>
+        <tr>
+          <td class="check-col"><input type="checkbox" name="ids" value="<%= n.id %>" class="row-check" aria-label="选择通知"></td>
+          <td class="muted nowrap"><%= n.created_at %></td>
+          <td><%= n.username || ('#' + n.user_id) %></td>
+          <td>
+            <span class="chip <%= n.type === 'session_expired' || n.level === 'err' ? 'err' : (n.type === 'checkin_failed' || n.level === 'warn' ? 'warn' : 'info') %>">
+              <%= n.type === 'session_expired' ? '授权过期' : (n.type === 'checkin_failed' ? '签到失败' : (n.level === 'warn' ? '重要' : (n.level === 'err' ? '紧急' : '系统'))) %>
+            </span>
+          </td>
+          <td class="msg-cell"><%= n.title %></td>
+          <td class="muted nowrap"><%= n.is_read ? '已读' : '未读' %></td>
+          <td>
+            <button type="submit" class="btn danger sm" formaction="/admin/notifications/<%= n.id %>/delete"
+                    onclick="return confirm('确定删除通知「<%= n.title %>」吗？')">删除</button>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    </div>
+  </form>
+  <% if (pages > 1) { %>
+  <div class="pager">
+    <% if (page > 1) { %><a class="btn ghost sm" href="/admin/notifications?page=<%= page - 1 %>">上一页</a><% } %>
+    <span class="muted small">第 <%= page %> / <%= pages %> 页，共 <%= total %> 条</span>
+    <% if (page < pages) { %><a class="btn ghost sm" href="/admin/notifications?page=<%= page + 1 %>">下一页</a><% } %>
+  </div>
+  <% } %>
+  <% } %>
+</div>
+
+<script>
+  (function () {
+    var all = document.getElementById('checkAllNotif');
+    if (!all) return;
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('.row-check'));
+    all.addEventListener('change', function () {
+      boxes.forEach(function (b) { b.checked = all.checked; });
+    });
+    boxes.forEach(function (b) {
+      b.addEventListener('change', function () {
+        all.checked = boxes.every(function (x) { return x.checked; });
+      });
+    });
+  })();
+</script>
+
 <%- include('partials/footer') %>

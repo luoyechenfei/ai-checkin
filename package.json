@@ -1,6 +1,6 @@
 {
   "name": "ai-checkin",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "多平台 AI 应用自动签到系统（Trae / WorkBuddy / CodeBuddy / ZCode / Qoder）- Docker 自部署",
   "main": "app/server.js",
   "scripts": {

@@ -286,6 +286,7 @@ const REGISTRY = {
     id: 'codebuddy',
     name: 'CodeBuddy',
     desc: '腾讯云 CodeBuddy AI 编程助手',
+    help: '获取 Access Token：①网页版（最简单）：浏览器打开 www.codebuddy.cn 并登录 → F12 开发者工具 → Network（网络）面板 → 过滤 /v2/ → 按 F5 刷新或进入积分/签到页面 → 点击任意 www.codebuddy.cn/v2 请求 → Headers → Request Headers → 复制 Authorization: Bearer 后面的整串。②桌面客户端：完全退出 CodeBuddy 后，带调试端口启动（Windows："C:\\Program Files\\CodeBuddy\\CodeBuddy.exe" --remote-debugging-port=9224；macOS：/Applications/CodeBuddy.app/Contents/MacOS/CodeBuddy --remote-debugging-port=9224），浏览器打开 http://127.0.0.1:9224 开启 Network 监听并操作客户端，从 /v2 请求中复制 Authorization。Token 有效期约 28 天；用户 ID（可选）为 JWT 载荷中的 sub 字段。',
     fields: [
       { key: 'access_token', label: 'Access Token', type: 'password', required: true, placeholder: '从 CodeBuddy 获取的 accessToken（Bearer Token）' },
       { key: 'uid', label: '用户 ID（可选）', type: 'text', required: false, placeholder: '用户 ID，部分接口可能需要' }

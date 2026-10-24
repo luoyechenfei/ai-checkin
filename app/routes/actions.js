@@ -383,4 +383,23 @@ router.post('/admin/broadcasts/:id/delete', requireAdmin, (req, res) => {
   res.redirect(back('/admin/notifications', '通知已删除'));
 });
 
+// ---------- 通知记录管理（仅管理员，可删除任意通知，含欢迎通知等系统消息） ----------
+router.post('/admin/notifications/:id/delete', requireAdmin, (req, res) => {
+  const target = req.body.from === 'list' ? '/notifications' : '/admin/notifications';
+  const n = db.prepare('SELECT * FROM notifications WHERE id = ?').get(req.params.id);
+  if (!n) return res.redirect(back(target, '通知不存在', 'err'));
+  db.prepare('DELETE FROM notifications WHERE id = ?').run(n.id);
+  auditReq(req, 'notification_delete', `删除通知「${n.title}」（#${n.id}，用户 #${n.user_id}）`);
+  res.redirect(back(target, '通知已删除'));
+});
+
+router.post('/admin/notifications/delete', requireAdmin, (req, res) => {
+  const ids = idList(req.body.ids);
+  if (!ids.length) return res.redirect(back('/admin/notifications', '请先选择要删除的通知', 'err'));
+  const placeholders = ids.map(() => '?').join(',');
+  const r = db.prepare(`DELETE FROM notifications WHERE id IN (${placeholders})`).run(...ids);
+  auditReq(req, 'notification_delete', `批量删除通知 ${r.changes} 条`);
+  res.redirect(back('/admin/notifications', `已删除 ${r.changes} 条通知`));
+});
+
 module.exports = router;

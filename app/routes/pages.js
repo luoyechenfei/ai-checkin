@@ -259,7 +259,17 @@ router.get('/admin/logs', requireAuth, requireAdmin, (req, res) => {
 router.get('/admin/notifications', requireAuth, requireAdmin, (req, res) => {
   const broadcasts = db.prepare('SELECT * FROM broadcasts ORDER BY id DESC LIMIT 100').all();
   const userCount = db.prepare(`SELECT COUNT(*) AS c FROM users WHERE status = 'active'`).get().c;
-  render(req, res, 'admin-notifications', { title: '系统通知', broadcasts, userCount });
+  // 全部通知记录（含欢迎通知等系统消息），管理员可逐条或批量删除
+  const total = db.prepare('SELECT COUNT(*) AS c FROM notifications').get().c;
+  const p = pageInfo(req, total);
+  const notices = db.prepare(`
+    SELECT n.*, u.username FROM notifications n
+    LEFT JOIN users u ON u.id = n.user_id
+    ORDER BY n.id DESC LIMIT ? OFFSET ?`).all(p.perPage, p.offset);
+  render(req, res, 'admin-notifications', {
+    title: '系统通知', broadcasts, userCount,
+    notices, page: p.page, pages: p.pages, total, perPage: p.perPage
+  });
 });
 
 module.exports = router;
