@@ -88,13 +88,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   ip         TEXT,
   created_at TEXT NOT NULL
 );
-
-CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
-CREATE INDEX IF NOT EXISTS idx_logs_user ON logs(user_id);
-CREATE INDEX IF NOT EXISTS idx_logs_account ON logs(account_id);
-CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, is_read);
-CREATE INDEX IF NOT EXISTS idx_notif_broadcast ON notifications(broadcast_id);
-CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
 `);
 
 /** 增量迁移：为旧数据库补列（SQLite 无 ADD COLUMN IF NOT EXISTS） */
@@ -112,6 +105,16 @@ ensureColumn('users', 'theme', "TEXT NOT NULL DEFAULT 'auto'");
 ensureColumn('notifications', 'broadcast_id', 'INTEGER');
 // 通知级别（系统广播使用 info/warn/err 区分普通、重要、紧急）
 ensureColumn('notifications', 'level', "TEXT NOT NULL DEFAULT 'info'");
+
+// 索引必须在补列迁移之后创建（旧库的 notifications 表可能还没有 broadcast_id）
+db.exec(`
+CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
+CREATE INDEX IF NOT EXISTS idx_logs_user ON logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_logs_account ON logs(account_id);
+CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_notif_broadcast ON notifications(broadcast_id);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
+`);
 
 function getSetting(key, fallback) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
