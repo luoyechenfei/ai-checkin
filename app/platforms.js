@@ -656,10 +656,12 @@ async function runCheckin(account, trigger) {
         signal: AbortSignal.timeout(10000)
       });
       const st = adapter.parseStatusResponse(sres.status, await sres.text());
-      const p = (st.credits || 0) + (st.extraCredits || 0);
+      const base = st.credits || 0;
+      const extra = st.extraCredits || 0;
+      const p = base + extra;
       if (p > 0) {
         result.points = p;
-        result.message = `${result.message}，获得 ${p} 积分`;
+        result.message = `${result.message}，获得 ${p} 积分` + (extra > 0 ? `（基础 ${base} + 额外 ${extra}）` : '');
       }
     } catch (e) { /* 积分补全失败不影响签到结果 */ }
   }
