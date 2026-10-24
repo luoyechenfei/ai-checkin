@@ -151,15 +151,30 @@ services:
 
 WorkBuddy 是 Electron 桌面应用，Token 加密保存在客户端内存中（磁盘上为密文），只能通过抓包获取：
 
-1. 完全退出 WorkBuddy 客户端（托盘图标也要退出）
-2. 命令行带调试端口启动（路径按实际安装位置）：
-   ```powershell
-   "D:\WorkBuddy\WorkBuddy.exe" --remote-debugging-port=9223
-   ```
-3. 用 CDP 工具（或浏览器打开 `http://127.0.0.1:9223`）连接调试端口，开启 Network 监听
-4. 在客户端内任意操作（或刷新页面），找到发往 `www.workbuddy.cn/v2/...` 的请求
-5. 复制请求头 `Authorization: Bearer` 后面的整串 Token 填入本系统
-6. 「用户 ID」为 Token 载荷中的 `sub` 字段（UUID），一般可留空
+1. **完全退出 WorkBuddy**：右键系统托盘图标 → 退出；再打开任务管理器（`Ctrl+Shift+Esc`），确认无 `WorkBuddy.exe` 残留
+2. **确认安装路径**：常见位置如下，找不到时在开始菜单搜 WorkBuddy → 右键 → 打开文件所在位置 → 右键快捷方式 → 属性 → 看「目标」中的路径
+   - `C:\Users\你的用户名\AppData\Local\Programs\workbuddy\WorkBuddy.exe`
+   - `C:\Program Files\WorkBuddy\WorkBuddy.exe`
+   - `D:\WorkBuddy\WorkBuddy.exe`
+3. **带调试端口启动**（三选一，路径换成你自己的）：
+   - **方法 A（最简单）**：按 `Win+R`，粘贴后回车：
+     ```
+     "C:\Users\你的用户名\AppData\Local\Programs\workbuddy\WorkBuddy.exe" --remote-debugging-port=9223
+     ```
+   - **方法 B（PowerShell）**：
+     ```powershell
+     & "C:\Users\你的用户名\AppData\Local\Programs\workbuddy\WorkBuddy.exe" --remote-debugging-port=9223
+     ```
+   - **方法 C（CMD）**：
+     ```cmd
+     "C:\Users\你的用户名\AppData\Local\Programs\workbuddy\WorkBuddy.exe" --remote-debugging-port=9223
+     ```
+4. 浏览器打开 `http://127.0.0.1:9223`，进入调试页面后切到 **Network** 面板
+5. 在 WorkBuddy 客户端内任意操作（或刷新页面），找到发往 `www.workbuddy.cn/v2/...` 的请求
+6. 复制请求头 `Authorization: Bearer` 后面的整串 Token 填入本系统
+7. 「用户 ID」为 Token 载荷中的 `sub` 字段（UUID），一般可留空
+
+> **提示**：若 9223 端口被占用，换个端口号（如 9224、9333）即可，启动命令和访问地址都要同步改。
 
 > **注意**：该 Token 为 Keycloak JWT，有效期约 **28 天**，远长于 Trae 的会话 Token，配置一次可稳定使用较久。
 >
