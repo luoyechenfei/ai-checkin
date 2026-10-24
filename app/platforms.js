@@ -10,8 +10,180 @@
 const { db, notify, getNow } = require('./db');
 const config = require('./config');
 const { addDays } = require('./security');
+const crypto = require('node:crypto');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
+
+// ---------- Trae OAuth 自动续期常量与工具 ----------
+const TRAE_AUTH_HOST = 'https://api.trae.cn';
+const TRAE_WEB_HOST = 'https://www.trae.cn';
+const TRAE_CLIENT_ID = 'ono9krqynydwx5';        // Trae CN IDE 客户端
+const TRAE_SOLO_CLIENT_ID = 'en1oxy7wnw8j9n';   // TRAE SOLO CN 客户端
+const TRAE_IDE_VERSION = '3.3.65';
+const TRAE_PLUGIN_VERSION = '2.3.24254';
+const TRAE_BRAND = 'ASUS TUF Gaming A15 FA507RM_FA507RM';
+const TRAE_DEVICE_EXCHANGE_PATH = '/trae/api/v3/oauth/ExchangeToken';
+const TRAE_CLOUDIDE_EXCHANGE_PATH = '/cloudide/api/v3/trae/oauth/ExchangeToken';
+
+function safeParseJSON(s) {
+  if (s && typeof s === 'object') return s;
+  try { const v = JSON.parse(String(s ?? '')); return v && typeof v === 'object' ? v : {}; }
+  catch { return {}; }
+}
+// 解析 Trae 返回的到期时间：秒 / 毫秒 / ISO 字符串，返回毫秒时间戳，0 表示无
+function traeWhenOf(v) {
+  if (v === undefined || v === null || v === '') return 0;
+  if (typeof v === 'string' && !/^\d+$/.test(v.trim())) {
+    const t = Date.parse(v);
+    return isNaN(t) ? 0 : t;
+  }
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return n < 1e11 ? n * 1000 : n;
+}
+// 从 JWT 载荷取 exp（毫秒）
+function jwtExp(token) {
+  try {
+    const p = JSON.parse(Buffer.from(String(token).split('.')[1], 'base64url').toString());
+    return traeWhenOf(p && p.exp);
+  } catch { return 0; }
+}
+// 生成 Trae 设备：16 位数字 device_id、32 位 hex machine_id、ECDSA P-256 密钥对
+function traeGenDevice() {
+  const deviceId = Array.from({ length: 16 }, (_, i) =>
+    (i === 0 ? crypto.randomInt(1, 10) : crypto.randomInt(0, 10))).join('');
+  const machineId = crypto.randomBytes(16).toString('hex');
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  return {
+    device_id: deviceId,
+    machine_id: machineId,
+    device_public_key: publicKey.export({ type: 'spki', format: 'pem' }),
+    device_private_key: privateKey.export({ type: 'pkcs8', format: 'pem' })
+  };
+}
+// 构造 Trae 扫码授权 URL（回调必须是 127.0.0.1，服务器部署走“粘贴回调链接”兜底）
+function traeOAuthUrl(device, callbackUrl) {
+  const p = new URLSearchParams({
+    login_version: '1',
+    auth_from: 'solo',
+    login_channel: 'native_ide',
+    plugin_version: TRAE_PLUGIN_VERSION,
+    auth_type: 'local',
+    client_id: TRAE_CLIENT_ID,
+    redirect: '0',
+    login_trace_id: crypto.randomUUID(),
+    auth_callback_url: callbackUrl,
+    machine_id: device.machine_id,
+    device_id: device.device_id,
+    x_device_id: device.device_id,
+    x_machine_id: device.machine_id,
+    x_device_brand: TRAE_BRAND,
+    x_device_type: 'windows',
+    x_os_version: 'Windows 10 Pro',
+    x_env: '',
+    x_app_version: TRAE_IDE_VERSION,
+    x_app_type: 'stable',
+    hide_saas_login: 'false'
+  });
+  return `${TRAE_WEB_HOST}/authorization?${p.toString()}`;
+}
+// 解析 Trae 回调链接中的 userJwt / userInfo
+function traeParseCallback(callbackUrl) {
+  const u = new URL(callbackUrl);
+  const q = u.searchParams;
+  const jwt = safeParseJSON(q.get('userJwt'));
+  const info = safeParseJSON(q.get('userInfo'));
+  const token = jwt.Token || jwt.token || '';
+  const refreshToken = jwt.RefreshToken || jwt.refreshToken || q.get('refreshToken') || '';
+  const expiresAt = traeWhenOf(jwt.TokenExpireAt || jwt.tokenExpireAt);
+  const uid = String(info.UserID || info.userId || q.get('userId') || '');
+  const name = String(info.ScreenName || info.screenName || '');
+  if (!token) throw new Error('回调链接中未找到 Token，请确认已在 Trae 完成登录');
+  if (!refreshToken) throw new Error('回调链接中未找到 Refresh Token，无法启用自动续期');
+  return { token, refreshToken, expiresAt, uid, name };
+}
+// 设备绑定 ExchangeToken（主）：用 refresh_token 换新 Token，不消耗 refresh_token；
+// 失败时回退到 /cloudide/... ExchangeToken（会轮换 refresh_token）
+async function traeExchangeToken(refreshToken, device, currentToken) {
+  const clients = [
+    { clientId: TRAE_SOLO_CLIENT_ID, platform: 'SOLO_PC', version: '0.1.64' },
+    { clientId: TRAE_CLIENT_ID, platform: 'IDE_PC', version: '3.3.99' }
+  ];
+  let lastErr = null;
+  for (const as of clients) {
+    try {
+      const ts = Math.floor(Date.now() / 1000);
+      const nonce = crypto.randomBytes(16).toString('hex');
+      const signText = ['POST', TRAE_DEVICE_EXCHANGE_PATH, as.clientId, refreshToken, String(ts), nonce].join('\n');
+      const priv = crypto.createPrivateKey(device.device_private_key);
+      const signature = crypto.sign('sha256', Buffer.from(signText), priv).toString('base64');
+      const body = {
+        ClientID: as.clientId,
+        ClientSecret: '',
+        RefreshToken: refreshToken,
+        DeviceInfo: {
+          DeviceID: device.device_id,
+          MachineID: device.machine_id,
+          PlatformCode: as.platform,
+          DeviceType: 'PC',
+          DeviceName: '',
+          DeviceModel: '',
+          ClientVersion: as.version,
+          DevicePublicKey: device.device_public_key,
+          DeviceBrand: TRAE_BRAND,
+          DeviceCPU: 'AMD',
+          OSInfo: 'Windows',
+          OSVersion: '10.0.22631'
+        },
+        DeviceProof: { Signature: signature, Timestamp: ts, Nonce: nonce },
+        IDEVersion: as.version
+      };
+      const headers = { 'Content-Type': 'application/json' };
+      if (currentToken) headers['Authorization'] = `Cloud-IDE-JWT ${currentToken}`;
+      const res = await fetch(TRAE_AUTH_HOST + TRAE_DEVICE_EXCHANGE_PATH, {
+        method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(20000)
+      });
+      const text = await res.text();
+      const r = (safeParseJSON(text).Result) || safeParseJSON(text).result || {};
+      const token = r.Token || r.token || '';
+      if (res.ok && token) {
+        return {
+          token,
+          refreshToken: r.RefreshToken || r.refreshToken || refreshToken,
+          expiresAt: traeWhenOf(r.TokenExpireAt || r.tokenExpireAt) || jwtExp(token)
+        };
+      }
+      lastErr = new Error(`设备绑定续期失败(${as.platform})：HTTP ${res.status} ${text.slice(0, 200)}`);
+    } catch (e) { lastErr = e; }
+  }
+  // 回退：cloudide ExchangeToken
+  try {
+    const res = await fetch(TRAE_AUTH_HOST + TRAE_CLOUDIDE_EXCHANGE_PATH, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ClientID: TRAE_CLIENT_ID, RefreshToken: refreshToken, ClientSecret: '-', UserID: '' }),
+      signal: AbortSignal.timeout(20000)
+    });
+    const text = await res.text();
+    const r = (safeParseJSON(text).Result) || safeParseJSON(text).result || {};
+    const token = r.Token || r.token || '';
+    if (res.ok && token) {
+      return {
+        token,
+        refreshToken: r.RefreshToken || r.refreshToken || refreshToken,
+        expiresAt: traeWhenOf(r.TokenExpireAt || r.tokenExpireAt) || jwtExp(token)
+      };
+    }
+    const msg = text.slice(0, 200);
+    if ([400, 401, 403].includes(res.status) || /refresh|expired|invalid|not matched|revoked|unauthori/i.test(msg)) {
+      throw new Error('Refresh Token 已失效，请重新扫码授权');
+    }
+    throw new Error(`回退续期失败：HTTP ${res.status} ${msg}`);
+  } catch (e) {
+    throw lastErr || e;
+  }
+}
+
 
 // ---------- 积分识别 ----------
 /** 常见积分字段名（小写匹配） */
@@ -135,11 +307,21 @@ const REGISTRY = {
     id: 'trae',
     name: 'Trae',
     desc: 'Trae AI IDE（字节跳动）',
-    help: '获取 Token：浏览器打开 www.trae.cn 并登录 → F12 开发者工具 → Network（网络）面板 → 过滤 api.trae.cn → 按 F5 刷新 → 点击 cn_credits_billing_status 等请求 → Headers → Request Headers → 复制 Authorization: Cloud-IDE-JWT 后面的整串。注意：Local Storage 中的 Cloud-IDE-Token 不可用；Token 有效期约 12 小时，失效后需重新获取。',
+    help: '推荐使用下方「OAuth 扫码授权（自动续期）」：系统生成 Trae 授权链接，扫码登录后把浏览器地址栏中无法打开的回调链接粘贴回来，系统自动保存 Token 与 Refresh Token，并在到期前自动续期，无需手动更新。也可手动填写 JWT Token（手动方式有效期约 12 小时，到期需重新获取）。',
     fields: [
-      { key: 'token', label: 'JWT Token', type: 'textarea', required: true, placeholder: '从 Trae 客户端提取的 Cloud-IDE-JWT Token' },
+      { key: 'token', label: 'JWT Token', type: 'textarea', required: true, placeholder: '优先使用上方 OAuth 自动授权；此处也可手动粘贴 Cloud-IDE-JWT Token' },
       { key: 'device_id', label: '设备 ID（可选）', type: 'text', required: false, placeholder: '设备 ID，部分接口可能需要' },
       { key: 'region', label: '用户区域（可选）', type: 'text', required: false, placeholder: '如 CN，部分接口可能需要' }
+    ],
+    // OAuth 扫码授权产生的字段（均可选，由前端自动填入隐藏域）
+    oauthFields: [
+      { key: 'refresh_token', required: false },
+      { key: 'machine_id', required: false },
+      { key: 'device_public_key', required: false },
+      { key: 'device_private_key', required: false },
+      { key: 'uid', required: false },
+      { key: 'name', required: false },
+      { key: 'token_expires_at', required: false }
     ],
     defaultUrl: 'https://api.trae.cn/trae/api/v2/ug/checkin_credits/claim',
     statusUrl: 'https://api.trae.cn/trae/api/v2/ug/checkin_credits/status',
@@ -149,6 +331,8 @@ const REGISTRY = {
       const headers = { 'User-Agent': UA, 'Content-Type': 'application/json', 'Origin': 'https://www.trae.cn', 'Referer': 'https://www.trae.cn/' };
       if (cred.token) headers['Authorization'] = `Cloud-IDE-JWT ${cred.token}`;
       if (cred.device_id) headers['x-device-id'] = cred.device_id;
+      if (cred.machine_id) headers['x-machine-id'] = cred.machine_id;
+      if (cred.uid) headers['x-uid'] = cred.uid;
       if (cred.region) headers['X-User-Region'] = cred.region;
       return { url: this.defaultUrl, method: 'POST', headers, body: '{"req_source":1}' };
     },
@@ -156,8 +340,45 @@ const REGISTRY = {
       const headers = { 'User-Agent': UA, 'Content-Type': 'application/json', 'Origin': 'https://www.trae.cn', 'Referer': 'https://www.trae.cn/' };
       if (cred.token) headers['Authorization'] = `Cloud-IDE-JWT ${cred.token}`;
       if (cred.device_id) headers['x-device-id'] = cred.device_id;
+      if (cred.machine_id) headers['x-machine-id'] = cred.machine_id;
+      if (cred.uid) headers['x-uid'] = cred.uid;
       if (cred.region) headers['X-User-Region'] = cred.region;
       return { url: this.statusUrl, method: 'POST', headers, body: '{}' };
+    },
+    // ---------- OAuth 自动续期 ----------
+    // 生成设备并构造扫码授权 URL（callback 仅用于展示，实际走粘贴兜底）
+    getOAuthAuthUrl(device, callbackUrl) {
+      return traeOAuthUrl(device, callbackUrl);
+    },
+    // 解析用户粘贴的回调链接，返回 token/refreshToken/expiresAt/uid/name
+    parseOAuthCallback(callbackUrl) {
+      return traeParseCallback(callbackUrl);
+    },
+    // 用 refresh_token 换新 token；返回需写回 credentials 的字段
+    async refreshToken(cred) {
+      if (!cred.refresh_token || !cred.device_private_key) {
+        throw new Error('缺少 Refresh Token 或设备密钥，无法自动续期');
+      }
+      const device = {
+        device_id: cred.device_id,
+        machine_id: cred.machine_id,
+        device_public_key: cred.device_public_key,
+        device_private_key: cred.device_private_key
+      };
+      const r = await traeExchangeToken(cred.refresh_token, device, cred.token);
+      const out = {
+        token: r.token,
+        refresh_token: r.refreshToken,
+        device_id: device.device_id,
+        machine_id: device.machine_id,
+        device_public_key: device.device_public_key,
+        device_private_key: device.device_private_key
+      };
+      if (cred.uid) out.uid = cred.uid;
+      if (cred.name) out.name = cred.name;
+      if (cred.region) out.region = cred.region;
+      if (r.expiresAt) out.token_expires_at = new Date(r.expiresAt).toISOString();
+      return out;
     },
     parseResponse: (status, body) => {
       if (status === 401 || status === 403) {
@@ -669,6 +890,19 @@ async function runCheckin(account, trigger) {
     } catch (e) { /* 积分补全失败不影响签到结果 */ }
   }
 
+  // 授权失效时，若账号开启了自动续期且支持刷新，则先刷新 Token 再重试一次签到
+  if (result.authExpired && account.auto_renew && typeof adapter.refreshToken === 'function') {
+    try {
+      const refreshed = await refreshAccountToken(account, true);
+      if (refreshed) {
+        const newCred = parseCredentials(db.prepare('SELECT credentials FROM accounts WHERE id = ?').get(account.id));
+        const req2 = adapter.buildRequest(newCred);
+        const res2 = await fetch(req2.url, { method: req2.method, headers: req2.headers, body: req2.body, redirect: 'follow', signal: AbortSignal.timeout(20000) });
+        result = adapter.parseResponse(res2.status, await res2.text(), newCred);
+      }
+    } catch (e) { /* 刷新失败，保持原 authExpired 结果 */ }
+  }
+
   // 写日志并更新账号状态
   const points = result.success && typeof result.points === 'number' ? result.points : 0;
   const resultText = `${result.success ? '成功' : '失败'}（${trigger === 'manual' ? '手动' : '定时'}）${points > 0 ? ` +${points}积分` : ''}：${result.message}`;
@@ -691,15 +925,54 @@ async function runCheckin(account, trigger) {
   return result;
 }
 
-/** 新增/重新授权时刷新授权时间与到期时间（保持一周） */
-function authorizeFields(credentials) {
+/** 自动续期：用 refresh_token 换新 token，写回 credentials 与 token_expires_at。
+ *  @param account 账号行
+ *  @param silent  true=失败时不发通知、不置 expired（供签到内重试使用）
+ *  @returns 刷新成功返回 true，否则 false
+ */
+async function refreshAccountToken(account, silent = false) {
+  const adapter = REGISTRY[account.platform];
+  if (!adapter || typeof adapter.refreshToken !== 'function') return false;
+  const cred = parseCredentials(account);
+  if (!cred.refresh_token) return false;
+  try {
+    const updated = await adapter.refreshToken(cred);
+    const expiresAt = updated.token_expires_at || null;
+    delete updated.token_expires_at;
+    delete cred.token_expires_at;
+    const newCred = { ...cred, ...updated };
+    db.prepare(`UPDATE accounts SET credentials = ?, token_expires_at = ? WHERE id = ?`)
+      .run(JSON.stringify(newCred), expiresAt, account.id);
+    return true;
+  } catch (e) {
+    if (!silent) {
+      const expired = /失效|expired|revoked|not matched/i.test(e.message || '');
+      if (expired) {
+        db.prepare(`UPDATE accounts SET status = 'expired' WHERE id = ?`).run(account.id);
+        notify(account.user_id, 'session_expired',
+          `「${account.name}」自动续期失败`,
+          `Refresh Token 已失效，无法自动续期。请前往“平台账号”重新扫码授权。`);
+      } else {
+        notify(account.user_id, 'checkin_failed',
+          `「${account.name}」自动续期失败`,
+          `${adapter.name} 自动续期出错：${e.message}`);
+      }
+    }
+    return false;
+  }
+}
+
+/** 新增/重新授权时刷新授权时间与到期时间。
+ *  开启自动续期的账号不受 7 天登出规则限制（expires_at 置空），由 token_expires_at 驱动续期。
+ */
+function authorizeFields(credentials, opts = {}) {
   const now = getNow();
   return {
     credentials: JSON.stringify(credentials),
     authorized_at: now,
-    expires_at: addDays(now, config.AUTH_KEEP_DAYS),
+    expires_at: opts.autoRenew ? null : addDays(now, config.AUTH_KEEP_DAYS),
     status: 'active'
   };
 }
 
-module.exports = { REGISTRY, platformOptions, runCheckin, parseCredentials, authorizeFields };
+module.exports = { REGISTRY, platformOptions, runCheckin, parseCredentials, authorizeFields, refreshAccountToken, traeGenDevice };

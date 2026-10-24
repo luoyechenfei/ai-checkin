@@ -1,0 +1,26 @@
+<%# Trae OAuth 扫码授权区块（自动续期） %>
+<div class="trae-oauth" style="margin-top:12px;padding:12px 14px;border:1px solid var(--border,#e5e7eb);border-radius:8px;background:rgba(59,130,246,.04);">
+  <div style="font-weight:600;margin-bottom:8px;">OAuth 扫码授权（推荐，可自动续期）</div>
+  <button type="button" class="btn ghost sm oauth-gen">生成 Trae 授权链接</button>
+  <div class="oauth-step2" hidden>
+    <p class="hint oauth-hint" style="margin:8px 0;font-size:12px;line-height:1.7;"></p>
+    <a class="oauth-link btn primary sm" href="#" target="_blank" rel="noopener" style="display:inline-block;margin-bottom:8px;">打开 Trae 授权页</a>
+    <div class="oauth-paste-area" hidden>
+      <textarea class="oauth-callback" rows="2" placeholder="粘贴登录后的完整回调链接（http://127.0.0.1:39393/authorize?...）" style="width:100%;"></textarea>
+      <button type="button" class="btn primary sm oauth-parse" style="margin-top:6px;">解析回调</button>
+    </div>
+  </div>
+  <div class="oauth-result" style="margin-top:8px;font-size:13px;"></div>
+  <input type="hidden" name="f_refresh_token">
+  <input type="hidden" name="f_machine_id">
+  <input type="hidden" name="f_device_public_key">
+  <input type="hidden" name="f_device_private_key">
+  <input type="hidden" name="f_uid">
+  <input type="hidden" name="f_name">
+  <input type="hidden" name="f_token_expires_at">
+  <div class="field" style="margin-top:8px;">
+    <label class="checkbox">
+      <input type="checkbox" name="auto_renew" value="1"> 启用自动续期（Token 到期前系统自动刷新，需通过上方 OAuth 授权）
+    </label>
+  </div>
+</div>

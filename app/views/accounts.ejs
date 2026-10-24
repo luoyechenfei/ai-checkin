@@ -30,6 +30,9 @@
     <% platforms.forEach(p => { %>
       <div class="cred-fields" data-platform="<%= p.id %>" hidden>
         <%- include('partials/credfields', { adapter: registry[p.id] }) %>
+        <% if (p.id === 'trae') { %>
+          <%- include('partials/trae-oauth') %>
+        <% } %>
       </div>
     <% }) %>
 
@@ -53,7 +56,9 @@
     <div class="acc-status">
       <% if (a.status === 'active') { %>
         <span class="chip ok">活跃</span>
-        <% if (a.daysLeft !== null) { %><span class="muted small">授权剩 <%= a.daysLeft %> 天</span><% } %>
+        <% if (a.auto_renew) { %><span class="chip" style="background:rgba(16,185,129,.12);color:#047857;">自动续期</span><% } %>
+        <% if (a.auto_renew && a.token_expires_at) { %><span class="muted small">Token 到期 <%= a.token_expires_at.slice(5,16) %></span>
+        <% } else if (a.daysLeft !== null) { %><span class="muted small">授权剩 <%= a.daysLeft %> 天</span><% } %>
       <% } else if (a.status === 'expired') { %>
         <span class="chip err">授权已过期 · 请重新授权</span>
       <% } else { %>
@@ -85,7 +90,10 @@
       <summary class="btn ghost sm">重新授权</summary>
       <form method="post" action="/accounts/<%= a.id %>/reauth" class="form subform">
         <%- include('partials/credfields', { adapter: registry[a.platform] }) %>
-        <button class="btn primary sm" type="submit">保存授权（刷新 7 天）</button>
+        <% if (a.platform === 'trae') { %>
+          <%- include('partials/trae-oauth') %>
+        <% } %>
+        <button class="btn primary sm" type="submit">保存授权</button>
       </form>
     </details>
     <details class="subform-wrap">
@@ -117,6 +125,165 @@
     }
     sel.addEventListener('change', toggle);
     toggle();
+
+    // 把解析结果填入隐藏域
+    function fillFields(block, form, d) {
+      if (!form) return;
+      var tokenField = form.querySelector('[name="f_token"]');
+      if (tokenField) tokenField.value = d.token;
+      var didField = form.querySelector('[name="f_device_id"]');
+      if (didField) didField.value = d.device_id;
+      block.querySelector('[name="f_refresh_token"]').value = d.refresh_token;
+      block.querySelector('[name="f_machine_id"]').value = d.machine_id;
+      block.querySelector('[name="f_device_public_key"]').value = d.device_public_key;
+      block.querySelector('[name="f_device_private_key"]').value = d.device_private_key;
+      block.querySelector('[name="f_uid"]').value = d.uid || '';
+      block.querySelector('[name="f_name"]').value = d.name || '';
+      block.querySelector('[name="f_token_expires_at"]').value = d.token_expires_at || '';
+      var cb2 = block.querySelector('[name="auto_renew"]');
+      if (cb2) cb2.checked = true;
+    }
+
+    // Trae OAuth 扫码授权流程
+    document.querySelectorAll('.trae-oauth').forEach(function (block) {
+      var form = block.closest('form');
+      var genBtn = block.querySelector('.oauth-gen');
+      var step2 = block.querySelector('.oauth-step2');
+      var hint = block.querySelector('.oauth-hint');
+      var link = block.querySelector('.oauth-link');
+      var pasteArea = block.querySelector('.oauth-paste-area');
+      var cbInput = block.querySelector('.oauth-callback');
+      var parseBtn = block.querySelector('.oauth-parse');
+      var result = block.querySelector('.oauth-result');
+      var tempId = '';
+      var pollTimer = null;
+
+      function showSuccess(d) {
+        fillFields(block, form, d);
+        var exp = d.token_expires_at ? new Date(d.token_expires_at) : null;
+        var expTxt = exp ? '，Token 到期 ' + exp.toLocaleString() : '';
+        result.innerHTML = '✅ 授权成功' + (d.name ? '（' + d.name + '）' : '') + expTxt + '，已自动勾选「自动续期」。';
+        result.style.color = '#047857';
+      }
+
+      // 无缝模式：轮询回调结果
+      function startPoll() {
+        pollTimer = setInterval(function () {
+          fetch('/accounts/oauth/trae/result?tempId=' + encodeURIComponent(tempId))
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+              if (d.ok) {
+                clearInterval(pollTimer); pollTimer = null;
+                showSuccess(d);
+              } else if (d.pending) {
+                // 继续等待
+              } else {
+                clearInterval(pollTimer); pollTimer = null;
+                result.textContent = '授权失败：' + (d.error || '未知错误');
+                result.style.color = '#dc2626';
+              }
+            })
+            .catch(function () { /* 网络抖动，继续轮询 */ });
+        }, 2000);
+      }
+
+      genBtn.addEventListener('click', function () {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        genBtn.disabled = true;
+        result.textContent = '正在生成授权链接…';
+        result.style.color = '';
+        fetch('/accounts/oauth/trae/url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ origin: window.location.origin }) })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!d.ok) throw new Error(d.error || '生成失败');
+            tempId = d.tempId;
+            link.href = d.url;
+            step2.hidden = false;
+            if (d.seamless) {
+              hint.innerHTML = '① 点击下方链接在新标签页打开 Trae 并登录授权；<br>② 授权成功后会<strong>自动返回并填充</strong>，无需手动操作。';
+              pasteArea.hidden = true;
+              result.textContent = '等待 Trae 授权完成…';
+              // 打开链接后开始轮询
+              link.click();
+              startPoll();
+            } else {
+              hint.innerHTML = '① 点击下方链接在新标签页打开 Trae 登录页，扫码登录；<br>② 登录后浏览器跳到一个打不开的地址（127.0.0.1），把<strong>完整地址</strong>复制粘贴到下方，点击「解析回调」。';
+              pasteArea.hidden = false;
+              result.textContent = '已生成授权链接，请完成登录并粘贴回调地址。';
+            }
+          })
+          .catch(function (e) {
+            result.textContent = '生成失败：' + e.message;
+            result.style.color = '#dc2626';
+          })
+          .finally(function () { genBtn.disabled = false; });
+      });
+
+      parseBtn.addEventListener('click', function () {
+        var cb = cbInput.value.trim();
+        if (!cb) { result.textContent = '请先粘贴回调链接'; result.style.color = '#dc2626'; return; }
+        parseBtn.disabled = true;
+        result.textContent = '正在解析…';
+        result.style.color = '';
+        fetch('/accounts/oauth/trae/callback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tempId: tempId, callback_url: cb })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!d.ok) throw new Error(d.error || '解析失败');
+            showSuccess(d);
+          })
+          .catch(function (e) {
+            result.textContent = '解析失败：' + e.message;
+            result.style.color = '#dc2626';
+          })
+          .finally(function () { parseBtn.disabled = false; });
+      });
+    });
+
+    // 授权成功页通过 postMessage 或 URL 参数回传 tempId，主动取结果填表
+    function pickOAuthResult(tid) {
+      // 精准定位「添加账号」表单的 Trae OAuth 区块（避免填到已有账号的重授权表单）
+      var addForm = document.querySelector('form[action="/accounts"]');
+      var block = addForm ? addForm.querySelector('.trae-oauth') : document.querySelector('.trae-oauth');
+      if (!block || !tid) return;
+      var result = block.querySelector('.oauth-result');
+      if (result) result.textContent = '正在获取授权结果…';
+      fetch('/accounts/oauth/trae/result?tempId=' + encodeURIComponent(tid))
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d.ok) { if (result) result.textContent = '授权失败：' + (d.error || '未知错误'); return; }
+          var form = block.closest('form');
+          if (form) {
+            var tf = form.querySelector('[name="f_token"]'); if (tf) tf.value = d.token;
+            var df = form.querySelector('[name="f_device_id"]'); if (df) df.value = d.device_id;
+          }
+          block.querySelector('[name="f_refresh_token"]').value = d.refresh_token;
+          block.querySelector('[name="f_machine_id"]').value = d.machine_id;
+          block.querySelector('[name="f_device_public_key"]').value = d.device_public_key;
+          block.querySelector('[name="f_device_private_key"]').value = d.device_private_key;
+          block.querySelector('[name="f_uid"]').value = d.uid || '';
+          block.querySelector('[name="f_name"]').value = d.name || '';
+          block.querySelector('[name="f_token_expires_at"]').value = d.token_expires_at || '';
+          var cb2 = block.querySelector('[name="auto_renew"]'); if (cb2) cb2.checked = true;
+          var exp = d.token_expires_at ? new Date(d.token_expires_at) : null;
+          var expTxt = exp ? '，Token 到期 ' + exp.toLocaleString() : '';
+          if (result) {
+            result.innerHTML = '✅ 授权成功' + (d.name ? '（' + d.name + '）' : '') + expTxt + '，已自动勾选「自动续期」。';
+            result.style.color = '#047857';
+          }
+        })
+        .catch(function () { if (result) result.textContent = '获取授权结果失败，请重试'; });
+    }
+    // 1) 页面加载时检查 oauth_done 参数（授权页跳转回来）
+    var urlDone = new URLSearchParams(window.location.search).get('oauth_done');
+    if (urlDone) pickOAuthResult(urlDone);
+    // 2) 监听授权页的 postMessage（新标签页场景，原账号页仍在）
+    window.addEventListener('message', function (e) {
+      if (e.data && e.data.type === 'trae_oauth_done') pickOAuthResult(e.data.tempId);
+    });
   })();
 </script>
 

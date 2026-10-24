@@ -3,13 +3,20 @@ const express = require('express');
 const router = express.Router();
 const config = require('../config');
 const { db, getSetting, setSetting, notify, getNow, auditReq, writeAudit } = require('../db');
-const { REGISTRY, platformOptions, runCheckin, authorizeFields } = require('../platforms');
+const { REGISTRY, platformOptions, runCheckin, authorizeFields, traeGenDevice } = require('../platforms');
 const { isValidTimezone, isValidHHMM } = require('../util');
 const {
   hashPassword, verifyPassword, createSession, destroySession,
   requireAuth, requireAdmin
 } = require('../security');
 const captcha = require('../captcha');
+
+// Trae OAuth 临时设备存储：key=tempId，value={device, expiresAt}（10 分钟有效）
+const oauthTempStore = new Map();
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of oauthTempStore) if (v.expiresAt < now) oauthTempStore.delete(k);
+}, 60000).unref?.();
 
 const back = (path, msg, type) =>
   `${path}?msg=${encodeURIComponent(msg)}&type=${type === 'err' ? 'err' : 'ok'}`;
@@ -26,15 +33,18 @@ function idList(raw) {
   return [...new Set(ids)];
 }
 
-/** 从表单中按适配器字段定义收集凭据 */
+/** 从表单中按适配器字段定义收集凭据（含 OAuth 隐藏字段） */
 function collectCredentials(req, platformId) {
   const adapter = REGISTRY[platformId];
   if (!adapter) return null;
   const cred = {};
-  for (const f of adapter.fields) {
+  const allFields = [...(adapter.fields || []), ...(adapter.oauthFields || [])];
+  for (const f of allFields) {
     const raw = req.body[`f_${f.key}`];
-    // 值可能是数组（同名字段重复提交）或非字符串，统一转字符串再 trim
-    const v = String(Array.isArray(raw) ? raw[raw.length - 1] : (raw ?? '')).trim();
+    // 同名字段可能来自多个平台的 credfields（如 Trae 与 Qoder 都有 token），
+    // 取第一个非空值，避免取到其它平台的空字段。
+    const arr = Array.isArray(raw) ? raw : [raw];
+    const v = arr.map(x => String(x ?? '').trim()).find(x => x) || '';
     if (f.required && !v) return null;
     if (v) cred[f.key] = v;
   }
@@ -272,12 +282,142 @@ router.post('/accounts', requireAuth, (req, res) => {
   const cred = collectCredentials(req, platform);
   if (!cred) return res.redirect(back('/accounts', '请完整填写平台必填凭据', 'err'));
 
-  const a = authorizeFields(cred);
-  db.prepare(`INSERT INTO accounts(user_id, platform, name, credentials, status, authorized_at, expires_at, checkin_time, created_at)
-              VALUES(?,?,?,?,?,?,?,?,?)`)
-    .run(req.user.id, platform, name, a.credentials, a.status, a.authorized_at, a.expires_at, time, getNow());
-  auditReq(req, 'account_add', `添加平台账号「${name}」（${platform}）`);
-  res.redirect(back('/accounts', `「${name}」添加成功，授权将保持 7 天，到期自动提醒`));
+  // 自动续期：仅当账号具备 refresh_token 时才允许启用
+  const wantAutoRenew = req.body.auto_renew === '1' || req.body.auto_renew === 'on';
+  const autoRenew = !!(wantAutoRenew && cred.refresh_token);
+  const tokenExpiresAt = cred.token_expires_at || null;
+  delete cred.token_expires_at;
+
+  const a = authorizeFields(cred, { autoRenew });
+  db.prepare(`INSERT INTO accounts(user_id, platform, name, credentials, status, authorized_at, expires_at, checkin_time, created_at, auto_renew, token_expires_at)
+              VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(req.user.id, platform, name, a.credentials, a.status, a.authorized_at, a.expires_at, time, getNow(), autoRenew ? 1 : 0, tokenExpiresAt);
+  auditReq(req, 'account_add', `添加平台账号「${name}」（${platform}）${autoRenew ? '，自动续期' : ''}`);
+  res.redirect(back('/accounts', `「${name}」添加成功${autoRenew ? '，已开启自动续期' : '，授权将保持 7 天，到期自动提醒'}`));
+});
+
+// ---------- Trae OAuth 自动续期：生成授权链接 / 解析回调 ----------
+// 生成设备并返回 Trae 扫码授权 URL
+router.post('/accounts/oauth/trae/url', requireAuth, (req, res) => {
+  const device = traeGenDevice();
+  const tempId = crypto.randomBytes(12).toString('hex');
+  oauthTempStore.set(tempId, { device, expiresAt: Date.now() + 10 * 60 * 1000 });
+  // 前端传入真实 origin（window.location.origin），比服务端 Host 头更可靠；
+  // 本地访问（127.0.0.1/localhost）→ 回调直接打回 app，做到无缝授权；
+  // 远程部署 → Trae 要求回调必须 127.0.0.1，走「粘贴回调链接」兜底
+  const origin = String(req.body.origin || req.headers.host || '').trim();
+  const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(origin) ||
+                  /^(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin);
+  let callbackUrl;
+  if (isLocal) {
+    const base = origin.startsWith('http') ? origin : `http://${origin}`;
+    // 回调 URL 必须干净（不能带 query/path 参数），否则 Trae 授权页会报「网络错误」；
+    // tempId 通过 cookie 传递，GET /authorize 时读取
+    callbackUrl = `${base}/authorize`;
+    res.cookie('trae_oauth_temp', tempId, { httpOnly: true, maxAge: 10 * 60 * 1000, sameSite: 'lax' });
+  } else {
+    callbackUrl = 'http://127.0.0.1:39393/authorize';
+  }
+  const url = REGISTRY.trae.getOAuthAuthUrl(device, callbackUrl);
+  res.json({ ok: true, tempId, url, seamless: isLocal });
+});
+
+// 共享：解析回调链接 + 设备绑定续期，返回 {ok, ...字段} 或 {ok:false, error}
+async function traeResolveCallback(tempId, callbackUrl) {
+  const stored = oauthTempStore.get(tempId);
+  if (!stored) return { ok: false, error: '授权会话已过期，请重新生成授权链接' };
+  if (Date.now() > stored.expiresAt) {
+    oauthTempStore.delete(tempId);
+    return { ok: false, error: '授权会话已过期，请重新生成授权链接' };
+  }
+  try {
+    const parsed = REGISTRY.trae.parseOAuthCallback(callbackUrl);
+    let token = parsed.token;
+    let refreshToken = parsed.refreshToken;
+    let expiresAt = parsed.expiresAt;
+    // 立即做一次设备绑定续期，让回调得到的无设备 Token 绑定到本设备
+    // （否则签到接口会返回 9074「当前参与用户太多」）；失败则使用原始 Token
+    try {
+      const bound = await REGISTRY.trae.refreshToken({
+        token: parsed.token,
+        refresh_token: parsed.refreshToken,
+        device_id: stored.device.device_id,
+        machine_id: stored.device.machine_id,
+        device_public_key: stored.device.device_public_key,
+        device_private_key: stored.device.device_private_key
+      });
+      token = bound.token;
+      refreshToken = bound.refresh_token;
+      if (bound.token_expires_at) expiresAt = Date.parse(bound.token_expires_at) || expiresAt;
+    } catch (e) { /* 绑定失败不阻断，后续签到/调度会再尝试 */ }
+    const out = {
+      token,
+      refresh_token: refreshToken,
+      device_id: stored.device.device_id,
+      machine_id: stored.device.machine_id,
+      device_public_key: stored.device.device_public_key,
+      device_private_key: stored.device.device_private_key,
+      uid: parsed.uid,
+      name: parsed.name,
+      token_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null
+    };
+    return { ok: true, ...out };
+  } catch (e) {
+    return { ok: false, error: e.message || '解析回调链接失败' };
+  }
+}
+
+// 解析用户粘贴的回调链接（远程部署兜底），返回 Token / Refresh Token / 到期时间
+router.post('/accounts/oauth/trae/callback', requireAuth, async (req, res) => {
+  const tempId = String(req.body.tempId || '').trim();
+  const callbackUrl = String(req.body.callback_url || '').trim();
+  const r = await traeResolveCallback(tempId, callbackUrl);
+  if (r.ok) oauthTempStore.delete(tempId);
+  res.json(r);
+});
+
+// 无缝回调：Trae 登录成功后重定向到此（仅本地访问生效）
+// 解析 userJwt → 设备绑定 → 通知 opener（postMessage）并跳回账号页
+router.get('/authorize', async (req, res) => {
+  // tempId 通过 cookie 传递（回调 URL 必须干净，否则 Trae 授权页报网络错误）
+  const tempId = String(req.cookies.trae_oauth_temp || '').trim();
+  // 从原始 URL 重建完整回调链接（含 userJwt / userInfo 等参数）
+  const callbackUrl = req.protocol + '://' + req.get('host') + req.originalUrl;
+  const r = await traeResolveCallback(tempId, callbackUrl);
+  if (r.ok) {
+    // 暂存结果（2 分钟），供前端读取
+    oauthTempStore.set(tempId, { ...oauthTempStore.get(tempId), result: r, resultExpiresAt: Date.now() + 2 * 60 * 1000 });
+    res.clearCookie('trae_oauth_temp');
+  }
+  const ok = r.ok;
+  const msg = ok ? 'Trae 授权成功，正在返回账号页…' : ('授权失败：' + (r.error || '未知错误'));
+  const backHref = ok ? `/accounts?oauth_done=${encodeURIComponent(tempId)}` : '/accounts';
+  res.send(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>Trae 授权</title>
+<style>body{font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f4f6fb;color:#1f2937}
+.card{background:#fff;border:1px solid #e5e9f2;border-radius:12px;padding:32px 40px;max-width:420px;text-align:center;box-shadow:0 1px 3px rgba(16,24,40,.06)}
+.icon{font-size:40px;margin-bottom:12px}h2{margin:0 0 8px;font-size:20px}p{margin:0;color:#6b7280;font-size:14px;line-height:1.6}
+.btn{margin-top:20px;display:inline-block;padding:8px 20px;background:#4f6ef7;color:#fff;border-radius:8px;text-decoration:none;font-size:14px}</style></head>
+<body><div class="card"><div class="icon">${ok ? '✅' : '❌'}</div><h2>${ok ? '授权成功' : '授权失败'}</h2><p>${msg}</p>
+${ok ? '<p style="margin-top:12px">页面将自动返回账号页…</p>' : ''}
+<a class="btn" href="${backHref}">${ok ? '立即返回' : '返回账号页'}</a></div>
+<script>
+${ok ? `try{if(window.opener){window.opener.postMessage({type:'trae_oauth_done',tempId:'${tempId}'},'*');}setTimeout(function(){location.href='${backHref}';},1200);}catch(e){location.href='${backHref}';}` : ''}
+</script></body></html>`);
+});
+
+// 前端获取无缝回调的解析结果（轮询 + 回传都会调用，不立即删除，靠 TTL 过期）
+router.get('/accounts/oauth/trae/result', requireAuth, (req, res) => {
+  const tempId = String(req.query.tempId || '').trim();
+  const stored = oauthTempStore.get(tempId);
+  if (!stored) return res.json({ ok: false, error: '授权会话已过期' });
+  if (stored.result) {
+    if (Date.now() > (stored.resultExpiresAt || 0)) {
+      oauthTempStore.delete(tempId);
+      return res.json({ ok: false, error: '结果已过期，请重新授权' });
+    }
+    return res.json(stored.result);
+  }
+  res.json({ ok: false, pending: true });
 });
 
 function getOwnAccount(req) {
@@ -307,11 +447,15 @@ router.post('/accounts/:id/reauth', requireAuth, (req, res) => {
   if (!acc) return res.redirect(back('/accounts', '账号不存在', 'err'));
   const cred = collectCredentials(req, acc.platform);
   if (!cred) return res.redirect(back('/accounts', '请完整填写平台必填凭据', 'err'));
-  const a = authorizeFields(cred);
-  db.prepare(`UPDATE accounts SET credentials=?, status=?, authorized_at=?, expires_at=? WHERE id=?`)
-    .run(a.credentials, a.status, a.authorized_at, a.expires_at, acc.id);
-  auditReq(req, 'account_reauth', `重新授权平台账号「${acc.name}」（${acc.platform}）`);
-  res.redirect(back('/accounts', `「${acc.name}」重新授权成功，授权期已刷新为 7 天`));
+  const wantAutoRenew = req.body.auto_renew === '1' || req.body.auto_renew === 'on';
+  const autoRenew = !!(wantAutoRenew && cred.refresh_token);
+  const tokenExpiresAt = cred.token_expires_at || null;
+  delete cred.token_expires_at;
+  const a = authorizeFields(cred, { autoRenew });
+  db.prepare(`UPDATE accounts SET credentials=?, status=?, authorized_at=?, expires_at=?, auto_renew=?, token_expires_at=? WHERE id=?`)
+    .run(a.credentials, a.status, a.authorized_at, a.expires_at, autoRenew ? 1 : 0, tokenExpiresAt, acc.id);
+  auditReq(req, 'account_reauth', `重新授权平台账号「${acc.name}」（${acc.platform}）${autoRenew ? '，自动续期' : ''}`);
+  res.redirect(back('/accounts', `「${acc.name}」重新授权成功${autoRenew ? '，已开启自动续期' : '，授权期已刷新为 7 天'}`));
 });
 
 router.post('/accounts/:id/time', requireAuth, (req, res) => {

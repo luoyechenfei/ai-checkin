@@ -97,7 +97,7 @@ function requireAdmin(req, res, next) {
 }
 
 // 已登录但未设置找回密码安全问题的用户，强制先完成设置
-const SEC_Q_WHITELIST = ['/password', '/logout', '/prefs/theme', '/public', '/captcha'];
+const SEC_Q_WHITELIST = ['/password', '/logout', '/prefs/theme', '/public', '/captcha', '/authorize'];
 function requireSecurityQuestions(req, res, next) {
   if (!req.user || req.user.hasQuestions) return next();
   if (SEC_Q_WHITELIST.some(p => req.path === p || req.path.startsWith(p + '/'))) return next();

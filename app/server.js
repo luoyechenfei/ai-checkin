@@ -13,6 +13,7 @@ app.set('views', path.join(__dirname, 'views'));
 app.locals.assetVersion = require('../package.json').version;
 
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(express.json({ limit: '1mb' }));
 
 // 轻量 Cookie 解析（避免额外依赖）
 app.use((req, res, next) => {

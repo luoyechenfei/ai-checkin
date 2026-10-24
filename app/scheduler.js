@@ -8,21 +8,37 @@
 const config = require('./config');
 const { db, getSetting, getNow, notify } = require('./db');
 const { purgeExpiredSessions } = require('./security');
-const { runCheckin } = require('./platforms');
+const { runCheckin, refreshAccountToken } = require('./platforms');
 
 let timer = null;
 let lastSweepDay = null;
+// Token 到期前多久开始自动续期（毫秒）：默认 30 分钟
+const RENEW_LEAD_MS = 30 * 60 * 1000;
 
 function tick() {
   try {
     const now = getNow();                 // 'YYYY-MM-DD HH:MM:SS'（按设置的时区）
     const today = now.slice(0, 10);
     const hhmm = now.slice(11, 16);
+    const nowMs = Date.now();
 
-    // 1) 平台授权到期 → 自动登出并提示
+    // 0) 自动续期：Token 即将到期的账号主动刷新（仅 auto_renew=1 且有 token_expires_at）
+    try {
+      const renewBefore = new Date(nowMs + RENEW_LEAD_MS).toISOString();
+      const renewCandidates = db.prepare(`
+        SELECT * FROM accounts
+        WHERE status = 'active' AND auto_renew = 1
+          AND token_expires_at IS NOT NULL AND token_expires_at <= ?`).all(renewBefore);
+      for (const acc of renewCandidates) {
+        refreshAccountToken(acc).catch(err => console.error('[scheduler] 自动续期异常:', err.message));
+      }
+    } catch (e) { console.error('[scheduler] 续期扫描异常:', e.message); }
+
+    // 1) 平台授权到期 → 自动登出并提示（自动续期账号 expires_at 为空，不受此规则影响）
     const expired = db.prepare(`
       SELECT * FROM accounts
-      WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at <= ?`).all(now);
+      WHERE status = 'active' AND auto_renew = 0
+        AND expires_at IS NOT NULL AND expires_at <= ?`).all(now);
     for (const acc of expired) {
       db.prepare(`UPDATE accounts SET status = 'expired', credentials = '{}' WHERE id = ?`).run(acc.id);
       notify(acc.user_id, 'session_expired',
@@ -33,7 +49,6 @@ function tick() {
     // 2) 每日定时签到（成功后当天不再执行；失败按冷却时间自动重试）
     const accounts = db.prepare(`SELECT * FROM accounts WHERE status = 'active'`).all();
     const todayStart = today + ' 00:00:00';
-    const nowMs = Date.parse(now.replace(' ', 'T') + 'Z');
     for (const acc of accounts) {
       const t = acc.checkin_time || '08:00';
       if (hhmm < t) continue;

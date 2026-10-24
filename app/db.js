@@ -120,6 +120,9 @@ for (let i = 1; i <= 3; i++) {
   ensureColumn('users', `sec_q${i}`, 'TEXT');
   ensureColumn('users', `sec_a${i}`, 'TEXT');
 }
+// 自动续期：是否启用 OAuth 自动续期；token_expires_at 为平台 Token 实际到期时间（ISO）
+ensureColumn('accounts', 'auto_renew', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('accounts', 'token_expires_at', 'TEXT');
 
 // 索引必须在补列迁移之后创建（旧库的 notifications 表可能还没有 broadcast_id）
 db.exec(`
