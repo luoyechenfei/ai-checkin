@@ -48,6 +48,33 @@ function jwtExp(token) {
     return traeWhenOf(p && p.exp);
   } catch { return 0; }
 }
+// 腾讯 copilot（WorkBuddy / CodeBuddy）用 refresh_token 换新 access_token + refresh_token
+async function tencentRefreshToken(refreshTokenStr) {
+  const url = 'https://copilot.tencent.com/v2/plugin/auth/token/refresh';
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Refresh-Token': refreshTokenStr,
+      'X-Auth-Refresh-Source': 'plugin',
+      'User-Agent': UA
+    },
+    body: '{}',
+    signal: AbortSignal.timeout(15000)
+  });
+  const text = await res.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch (e) { /* ignore */ }
+  if (res.status !== 200 || !json || json.code !== 0) {
+    const msg = json && (json.message || json.msg) ? (json.message || json.msg) : `HTTP ${res.status}`;
+    throw new Error(`refresh_token 刷新失败：${msg}`);
+  }
+  const data = json.data || {};
+  const accessToken = data.accessToken || data.access_token || '';
+  const newRefreshToken = data.refreshToken || data.refresh_token || refreshTokenStr;
+  if (!accessToken) throw new Error('refresh 响应中未返回 accessToken');
+  return { access_token: accessToken, refresh_token: newRefreshToken };
+}
 // 生成 Trae 设备：16 位数字 device_id、32 位 hex machine_id、ECDSA P-256 密钥对
 function traeGenDevice() {
   const deviceId = Array.from({ length: 16 }, (_, i) =>
@@ -424,9 +451,10 @@ const REGISTRY = {
     id: 'workbuddy',
     name: 'WorkBuddy',
     desc: '腾讯 WorkBuddy AI 编程助手（桌面端）',
-    help: '获取 Access Token：WorkBuddy 是 Electron 应用，Token 加密保存在内存中，需抓包获取。①完全退出 WorkBuddy 客户端；②命令行带调试端口启动："D:\\WorkBuddy\\WorkBuddy.exe" --remote-debugging-port=9223（路径按实际安装位置）；③打开 http://127.0.0.1:9223 进入调试页（或用支持 CDP 的工具连接），开启 Network 监听后刷新/操作客户端，从任意 www.workbuddy.cn/v2 请求的 Headers 中复制 Authorization: Bearer 后面的整串填入。Token 为 Keycloak JWT，有效期约 28 天；用户 ID 即 JWT 载荷中的 sub 字段（99494ddb- 开头的 UUID），可不填。',
+    help: '获取 Access Token：WorkBuddy 是 Electron 应用，Token 加密保存在内存中，需抓包获取。①完全退出 WorkBuddy 客户端；②命令行带调试端口启动："D:\\WorkBuddy\\WorkBuddy.exe" --remote-debugging-port=9223（路径按实际安装位置）；③打开 http://127.0.0.1:9223 进入调试页（或用支持 CDP 的工具连接），开启 Network 监听后刷新/操作客户端，从任意 www.workbuddy.cn/v2 请求的 Headers 中复制 Authorization: Bearer 后面的整串填入。Token 为 Keycloak JWT，有效期约 28 天；用户 ID 即 JWT 载荷中的 sub 字段（99494ddb- 开头的 UUID），可不填。\n\n【自动续期】如需开启自动续期，请同时填入 Refresh Token：在 WorkBuddy 本地登录态文件中查找 refreshToken 字段（%APPDATA%/workbuddy-desktop 或应用数据目录下的 .info/.json 文件），复制 refreshToken 值填入。填入后可勾选「自动续期」，系统会在 Token 到期前自动刷新。',
     fields: [
       { key: 'access_token', label: 'Access Token', type: 'password', required: true, placeholder: '从 WorkBuddy 客户端抓包获取的 Bearer Token' },
+      { key: 'refresh_token', label: 'Refresh Token（可选，填后可自动续期）', type: 'password', required: false, placeholder: '从 WorkBuddy 本地登录态文件获取的 refreshToken' },
       { key: 'uid', label: '用户 ID（可选）', type: 'text', required: false, placeholder: 'JWT 载荷中的 sub 字段（UUID），一般可留空' },
       { key: 'domain', label: '域名（可选）', type: 'select', required: false, options: ['https://www.workbuddy.cn', 'https://www.codebuddy.cn'], placeholder: '默认 https://www.workbuddy.cn' }
     ],
@@ -466,6 +494,14 @@ const REGISTRY = {
         headers,
         body: '{}'
       };
+    },
+    async refreshToken(cred) {
+      if (!cred.refresh_token) throw new Error('缺少 Refresh Token，无法自动续期');
+      const r = await tencentRefreshToken(cred.refresh_token);
+      const out = { access_token: r.access_token, refresh_token: r.refresh_token };
+      const expMs = jwtExp(r.access_token);
+      if (expMs) out.token_expires_at = new Date(expMs).toISOString();
+      return out;
     },
     parseResponse: (status, body) => {
       if (status === 401 || status === 403) {
@@ -507,9 +543,10 @@ const REGISTRY = {
     id: 'codebuddy',
     name: 'CodeBuddy',
     desc: '腾讯云 CodeBuddy AI 编程助手',
-    help: '获取 Access Token：①网页版（最简单）：浏览器打开 www.codebuddy.cn 并登录 → F12 开发者工具 → Network（网络）面板 → 过滤 /v2/ → 按 F5 刷新或进入积分/签到页面 → 点击任意 www.codebuddy.cn/v2 请求 → Headers → Request Headers → 复制 Authorization: Bearer 后面的整串。②桌面客户端：完全退出 CodeBuddy 后，带调试端口启动（Windows："C:\\Program Files\\CodeBuddy\\CodeBuddy.exe" --remote-debugging-port=9224；macOS：/Applications/CodeBuddy.app/Contents/MacOS/CodeBuddy --remote-debugging-port=9224），浏览器打开 http://127.0.0.1:9224 开启 Network 监听并操作客户端，从 /v2 请求中复制 Authorization。Token 有效期约 28 天；用户 ID（可选）为 JWT 载荷中的 sub 字段。',
+    help: '获取 Access Token：①网页版（最简单）：浏览器打开 www.codebuddy.cn 并登录 → F12 开发者工具 → Network（网络）面板 → 过滤 /v2/ → 按 F5 刷新或进入积分/签到页面 → 点击任意 www.codebuddy.cn/v2 请求 → Headers → Request Headers → 复制 Authorization: Bearer 后面的整串。②桌面客户端：完全退出 CodeBuddy 后，带调试端口启动（Windows："C:\\Program Files\\CodeBuddy\\CodeBuddy.exe" --remote-debugging-port=9224；macOS：/Applications/CodeBuddy.app/Contents/MacOS/CodeBuddy --remote-debugging-port=9224），浏览器打开 http://127.0.0.1:9224 开启 Network 监听并操作客户端，从 /v2 请求中复制 Authorization。Token 有效期约 28 天；用户 ID（可选）为 JWT 载荷中的 sub 字段。\n\n【自动续期】如需开启自动续期，请同时填入 Refresh Token：在 CodeBuddy 本地登录态文件中查找 refreshToken 字段（%APPDATA%/codebuddy 或应用数据目录下的 .info/.json 文件），复制 refreshToken 值填入。填入后可勾选「自动续期」，系统会在 Token 到期前自动刷新。',
     fields: [
       { key: 'access_token', label: 'Access Token', type: 'password', required: true, placeholder: '从 CodeBuddy 获取的 accessToken（Bearer Token）' },
+      { key: 'refresh_token', label: 'Refresh Token（可选，填后可自动续期）', type: 'password', required: false, placeholder: '从 CodeBuddy 本地登录态文件获取的 refreshToken' },
       { key: 'uid', label: '用户 ID（可选）', type: 'text', required: false, placeholder: '用户 ID，部分接口可能需要' }
     ],
     defaultUrl: 'https://www.codebuddy.cn/v2/billing/meter/daily-checkin',
@@ -545,6 +582,14 @@ const REGISTRY = {
         headers,
         body: '{}'
       };
+    },
+    async refreshToken(cred) {
+      if (!cred.refresh_token) throw new Error('缺少 Refresh Token，无法自动续期');
+      const r = await tencentRefreshToken(cred.refresh_token);
+      const out = { access_token: r.access_token, refresh_token: r.refresh_token };
+      const expMs = jwtExp(r.access_token);
+      if (expMs) out.token_expires_at = new Date(expMs).toISOString();
+      return out;
     },
     parseResponse: (status, body) => {
       if (status === 401 || status === 403) {
@@ -975,4 +1020,4 @@ function authorizeFields(credentials, opts = {}) {
   };
 }
 
-module.exports = { REGISTRY, platformOptions, runCheckin, parseCredentials, authorizeFields, refreshAccountToken, traeGenDevice };
+module.exports = { REGISTRY, platformOptions, runCheckin, parseCredentials, authorizeFields, refreshAccountToken, traeGenDevice, jwtExp };

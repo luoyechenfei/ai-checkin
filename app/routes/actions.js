@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const config = require('../config');
 const { db, getSetting, setSetting, notify, getNow, auditReq, writeAudit } = require('../db');
-const { REGISTRY, platformOptions, runCheckin, authorizeFields, traeGenDevice } = require('../platforms');
+const { REGISTRY, platformOptions, runCheckin, authorizeFields, traeGenDevice, jwtExp } = require('../platforms');
 const { isValidTimezone, isValidHHMM } = require('../util');
 const {
   hashPassword, verifyPassword, createSession, destroySession,
@@ -282,6 +282,13 @@ router.post('/accounts', requireAuth, (req, res) => {
   const cred = collectCredentials(req, platform);
   if (!cred) return res.redirect(back('/accounts', '请完整填写平台必填凭据', 'err'));
 
+  // 自动续期：若账号具备 refresh_token，从 JWT 解析 token 到期时间（支持 Trae 的 token 与腾讯系的 access_token）
+  const adapter = REGISTRY[platform];
+  if (cred.refresh_token && typeof adapter.refreshToken === 'function') {
+    const tokenStr = cred.token || cred.access_token || '';
+    const expMs = jwtExp(tokenStr);
+    if (expMs) cred.token_expires_at = new Date(expMs).toISOString();
+  }
   // 自动续期：仅当账号具备 refresh_token 时才允许启用
   const wantAutoRenew = req.body.auto_renew === '1' || req.body.auto_renew === 'on';
   const autoRenew = !!(wantAutoRenew && cred.refresh_token);
@@ -448,6 +455,13 @@ router.post('/accounts/:id/reauth', requireAuth, (req, res) => {
   if (!acc) return res.redirect(back('/accounts', '账号不存在', 'err'));
   const cred = collectCredentials(req, acc.platform);
   if (!cred) return res.redirect(back('/accounts', '请完整填写平台必填凭据', 'err'));
+  // 自动续期：若账号具备 refresh_token，从 JWT 解析 token 到期时间
+  const reAdapter = REGISTRY[acc.platform];
+  if (cred.refresh_token && typeof reAdapter.refreshToken === 'function') {
+    const tokenStr = cred.token || cred.access_token || '';
+    const expMs = jwtExp(tokenStr);
+    if (expMs) cred.token_expires_at = new Date(expMs).toISOString();
+  }
   const wantAutoRenew = req.body.auto_renew === '1' || req.body.auto_renew === 'on';
   const autoRenew = !!(wantAutoRenew && cred.refresh_token);
   const tokenExpiresAt = cred.token_expires_at || null;

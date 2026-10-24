@@ -32,6 +32,12 @@
         <%- include('partials/credfields', { adapter: registry[p.id] }) %>
         <% if (p.id === 'trae') { %>
           <%- include('partials/trae-oauth') %>
+        <% } else if (registry[p.id] && typeof registry[p.id].refreshToken === 'function') { %>
+          <div class="field" style="margin-top:8px;">
+            <label class="check-line">
+              <input type="checkbox" name="auto_renew" value="1"> 启用自动续期（需已填入 Refresh Token，Token 到期前系统自动刷新）
+            </label>
+          </div>
         <% } %>
       </div>
     <% }) %>
@@ -92,6 +98,12 @@
         <%- include('partials/credfields', { adapter: registry[a.platform] }) %>
         <% if (a.platform === 'trae') { %>
           <%- include('partials/trae-oauth') %>
+        <% } else if (registry[a.platform] && typeof registry[a.platform].refreshToken === 'function') { %>
+          <div class="field" style="margin-top:8px;">
+            <label class="check-line">
+              <input type="checkbox" name="auto_renew" value="1" <%= a.auto_renew ? 'checked' : '' %>> 启用自动续期（需已填入 Refresh Token）
+            </label>
+          </div>
         <% } %>
         <button class="btn primary sm" type="submit">保存授权</button>
       </form>
