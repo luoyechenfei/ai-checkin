@@ -37,6 +37,11 @@
         </div>
       </div>
       <p class="hint">端口修改需与 Docker 映射参数保持一致（<code>-p 外部端口:内部端口</code>），并重建容器后生效。</p>
+      <div class="field">
+        <label>Trae OAuth 回调地址（可选）</label>
+        <input type="text" name="oauth_callback_base" value="<%= settings.oauth_callback_base %>" placeholder="如 http://192.168.0.114:3000，留空则自动检测">
+        <p class="hint">远程/局域网部署时填写本系统的实际访问地址（含端口），Trae 授权后会跳转回此地址。本地访问（127.0.0.1/localhost）可留空自动检测。</p>
+      </div>
       <label class="check-line">
         <input type="checkbox" name="allow_register" value="1" <%= settings.allow_register === '1' ? 'checked' : '' %>> 开放用户注册
       </label>

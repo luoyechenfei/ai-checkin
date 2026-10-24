@@ -255,7 +255,8 @@ router.get('/admin', requireAuth, requireAdmin, (req, res) => {
     timezone: getSetting('timezone', config.DEFAULT_TIMEZONE),
     allow_register: getSetting('allow_register', '0'),
     external_port: getSetting('external_port', ''),
-    internal_port: getSetting('internal_port', String(config.PORT))
+    internal_port: getSetting('internal_port', String(config.PORT)),
+    oauth_callback_base: getSetting('oauth_callback_base', '')
   };
   const accounts = db.prepare(`
     SELECT a.*, u.username FROM accounts a

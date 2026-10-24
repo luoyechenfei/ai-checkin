@@ -302,24 +302,22 @@ router.post('/accounts/oauth/trae/url', requireAuth, (req, res) => {
   const device = traeGenDevice();
   const tempId = crypto.randomBytes(12).toString('hex');
   oauthTempStore.set(tempId, { device, expiresAt: Date.now() + 10 * 60 * 1000 });
-  // 前端传入真实 origin（window.location.origin），比服务端 Host 头更可靠；
-  // 本地访问（127.0.0.1/localhost）→ 回调直接打回 app，做到无缝授权；
-  // 远程部署 → Trae 要求回调必须 127.0.0.1，走「粘贴回调链接」兜底
-  const origin = String(req.body.origin || req.headers.host || '').trim();
-  const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(origin) ||
-                  /^(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin);
-  let callbackUrl;
-  if (isLocal) {
-    const base = origin.startsWith('http') ? origin : `http://${origin}`;
-    // 回调 URL 必须干净（不能带 query/path 参数），否则 Trae 授权页会报「网络错误」；
-    // tempId 通过 cookie 传递，GET /authorize 时读取
-    callbackUrl = `${base}/authorize`;
+  // 回调地址优先级：管理后台手动配置 > 自动检测请求来源地址
+  const configuredBase = (getSetting('oauth_callback_base', '') || '').trim().replace(/\/+$/, '');
+  let origin = String(req.body.origin || req.headers.host || '').trim();
+  if (origin && !/^https?:\/\//i.test(origin)) origin = `http://${origin}`;
+
+  let base = configuredBase || origin;
+  let seamless = !!base;
+
+  // 回调 URL 必须干净（不能带 query/path 参数），否则 Trae 授权页会报「网络错误」；
+  // tempId 通过 cookie 传递，GET /authorize 时读取
+  const callbackUrl = base ? `${base}/authorize` : 'http://127.0.0.1:39393/authorize';
+  if (seamless) {
     res.cookie('trae_oauth_temp', tempId, { httpOnly: true, maxAge: 10 * 60 * 1000, sameSite: 'lax' });
-  } else {
-    callbackUrl = 'http://127.0.0.1:39393/authorize';
   }
   const url = REGISTRY.trae.getOAuthAuthUrl(device, callbackUrl);
-  res.json({ ok: true, tempId, url, seamless: isLocal });
+  res.json({ ok: true, tempId, url, seamless, callbackBase: base });
 });
 
 // 共享：解析回调链接 + 设备绑定续期，返回 {ok, ...字段} 或 {ok:false, error}
@@ -519,6 +517,7 @@ router.post('/admin/settings', requireAdmin, (req, res) => {
   setSetting('allow_register', req.body.allow_register === '1' ? '1' : '0');
   setSetting('internal_port', (req.body.internal_port || '').trim() || String(config.PORT));
   setSetting('external_port', (req.body.external_port || '').trim());
+  setSetting('oauth_callback_base', (req.body.oauth_callback_base || '').trim().replace(/\/+$/, ''));
   auditReq(req, 'settings_update', `更新全局设置：站点名称「${siteName}」、默认签到时间 ${time}、时区 ${timezone}`);
   res.redirect(back('/admin', '设置已保存'));
 });
