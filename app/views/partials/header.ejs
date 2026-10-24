@@ -34,6 +34,7 @@
       <a href="/accounts" class="<%= title === '平台账号' ? 'active' : '' %>">平台账号</a>
       <a href="/logs" class="<%= title === '签到记录' ? 'active' : '' %>">签到记录</a>
       <a href="/notifications" class="<%= title === '通知' ? 'active' : '' %>">通知<% if (unread > 0) { %><span class="badge"><%= unread %></span><% } %></a>
+      <a href="/password" class="<%= title === '账号设置' ? 'active' : '' %>">设置</a>
       <% if (user.isAdmin) { %><a href="/admin" class="<%= ['管理后台', '操作日志', '系统通知'].includes(title) ? 'active' : '' %>">管理</a><% } %>
       <span class="nav-user"><%= user.username %></span>
       <label class="theme-select-wrap" title="主题模式">

@@ -142,6 +142,117 @@ router.post('/logout', (req, res) => {
   res.redirect('/login?msg=' + encodeURIComponent('已退出登录'));
 });
 
+// ---------- 账号设置：修改密码 / 安全问题 ----------
+router.post('/password/change', requireAuth, (req, res) => {
+  const oldPw = req.body.old_password || '';
+  const pw = req.body.password || '';
+  const pw2 = req.body.password2 || '';
+  const u = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
+  if (!u || !verifyPassword(oldPw, u.password_hash)) {
+    auditReq(req, 'password_change', '修改密码失败：原密码错误');
+    return res.redirect(back('/password', '原密码不正确', 'err'));
+  }
+  if (pw.length < 6) return res.redirect(back('/password', '新密码至少 6 位', 'err'));
+  if (pw !== pw2) return res.redirect(back('/password', '两次输入的新密码不一致', 'err'));
+  if (pw === oldPw) return res.redirect(back('/password', '新密码不能与原密码相同', 'err'));
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(pw), req.user.id);
+  // 使其它设备上的会话失效，仅保留当前会话
+  const cur = req.cookies && req.cookies[config.SESSION_COOKIE];
+  if (cur) db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(req.user.id, cur);
+  auditReq(req, 'password_change', '修改登录密码');
+  res.redirect(back('/password', '密码已修改，其他设备的登录状态已失效'));
+});
+
+router.post('/password/questions', requireAuth, (req, res) => {
+  const pw = req.body.current_password || '';
+  const u = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
+  if (!u || !verifyPassword(pw, u.password_hash)) {
+    auditReq(req, 'secq_update', '设置安全问题失败：当前密码错误');
+    return res.redirect(back('/password', '当前密码不正确', 'err'));
+  }
+  const qs = [], as = [];
+  for (let i = 1; i <= 3; i++) {
+    const q = String(req.body[`q${i}`] || '').trim();
+    const a = String(req.body[`a${i}`] || '').trim();
+    if (!q || !a) return res.redirect(back('/password', `请完整填写第 ${i} 个安全问题与答案`, 'err'));
+    if (q.length > 100 || a.length > 100) return res.redirect(back('/password', '问题或答案过长（最多 100 字符）', 'err'));
+    qs.push(q); as.push(hashPassword(a.toLowerCase()));
+  }
+  db.prepare('UPDATE users SET sec_q1=?, sec_a1=?, sec_q2=?, sec_a2=?, sec_q3=?, sec_a3=? WHERE id=?')
+    .run(qs[0], as[0], qs[1], as[1], qs[2], as[2], req.user.id);
+  auditReq(req, 'secq_update', '设置/更新找回密码安全问题');
+  res.redirect(back('/password', '安全问题已保存，可用于找回密码'));
+});
+
+// ---------- 找回密码（无需登录） ----------
+const crypto = require('crypto');
+
+/** 在“站点时区的墙上时间字符串”上加分钟数（与 getNow 输出格式一致） */
+function addMinutes(dateStr, minutes) {
+  const d = new Date(dateStr.replace(' ', 'T') + 'Z');
+  d.setUTCMinutes(d.getUTCMinutes() + minutes);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+}
+
+router.post('/forgot', (req, res) => {
+  if (!captcha.verify(req.body.captcha_id, req.body.captcha_code)) {
+    return res.redirect(back('/forgot', '验证码错误或已过期', 'err'));
+  }
+  const username = (req.body.username || '').trim();
+  const u = db.prepare(`SELECT * FROM users WHERE username = ? AND status = 'active'`).get(username);
+  if (!u) return res.redirect(back('/forgot', '该用户名不存在或已被禁用', 'err'));
+  if (!u.sec_q1 || !u.sec_q2 || !u.sec_q3) {
+    return res.redirect(back('/forgot', '该账号未设置安全问题，无法自助找回，请联系管理员重置密码', 'err'));
+  }
+  db.prepare('DELETE FROM password_resets WHERE user_id = ? OR expires_at <= ?').run(u.id, getNow());
+  const token = crypto.randomBytes(24).toString('hex');
+  db.prepare('INSERT INTO password_resets(token, user_id, verified, attempts, created_at, expires_at) VALUES(?,?,0,0,?,?)')
+    .run(token, u.id, getNow(), addMinutes(getNow(), 10));
+  writeAudit({ userId: u.id, username: u.username, action: 'forgot_request', detail: '申请找回密码', ip: clientIp(req) });
+  res.redirect('/forgot/answer?token=' + token);
+});
+
+router.post('/forgot/answer', (req, res) => {
+  const r = db.prepare('SELECT * FROM password_resets WHERE token = ?').get(String(req.body.token || ''));
+  if (!r || r.expires_at <= getNow() || r.verified) {
+    return res.redirect(back('/forgot', '链接无效或已过期，请重新申请', 'err'));
+  }
+  if (r.attempts >= 5) {
+    db.prepare('DELETE FROM password_resets WHERE token = ?').run(r.token);
+    return res.redirect(back('/forgot', '答案错误次数过多，请重新申请', 'err'));
+  }
+  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(r.user_id);
+  if (!u) return res.redirect(back('/forgot', '账号不存在', 'err'));
+  const ok = [1, 2, 3].every(i =>
+    verifyPassword(String(req.body[`a${i}`] || '').trim().toLowerCase(), u[`sec_a${i}`] || ''));
+  if (!ok) {
+    db.prepare('UPDATE password_resets SET attempts = attempts + 1 WHERE token = ?').run(r.token);
+    const left = 4 - r.attempts;
+    return res.redirect('/forgot/answer?token=' + r.token + '&msg=' +
+      encodeURIComponent(`答案不正确，还可尝试 ${left} 次`) + '&type=err');
+  }
+  db.prepare('UPDATE password_resets SET verified = 1 WHERE token = ?').run(r.token);
+  res.redirect('/forgot/reset?token=' + r.token);
+});
+
+router.post('/forgot/reset', (req, res) => {
+  const r = db.prepare('SELECT * FROM password_resets WHERE token = ?').get(String(req.body.token || ''));
+  if (!r || !r.verified || r.expires_at <= getNow()) {
+    return res.redirect(back('/forgot', '链接无效、未通过验证或已过期，请重新申请', 'err'));
+  }
+  const pw = req.body.password || '';
+  const pw2 = req.body.password2 || '';
+  if (pw.length < 6) return res.redirect('/forgot/reset?token=' + r.token + '&msg=' + encodeURIComponent('新密码至少 6 位') + '&type=err');
+  if (pw !== pw2) return res.redirect('/forgot/reset?token=' + r.token + '&msg=' + encodeURIComponent('两次输入的新密码不一致') + '&type=err');
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(pw), r.user_id);
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(r.user_id);
+  db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(r.user_id);
+  const u = db.prepare('SELECT username FROM users WHERE id = ?').get(r.user_id);
+  writeAudit({ userId: r.user_id, username: u ? u.username : '', action: 'forgot_success', detail: '通过安全问题找回密码', ip: clientIp(req) });
+  res.redirect(back('/login', '密码已重置，请使用新密码登录'));
+});
+
 // ---------- 主题偏好 ----------
 router.post('/prefs/theme', requireAuth, (req, res) => {
   const theme = String(req.body.theme || '');
@@ -295,6 +406,7 @@ router.post('/admin/users/:id/op', requireAdmin, (req, res) => {
     db.prepare('DELETE FROM accounts WHERE user_id = ?').run(target.id);
     db.prepare('DELETE FROM notifications WHERE user_id = ?').run(target.id);
     db.prepare('DELETE FROM logs WHERE user_id = ?').run(target.id);
+    db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(target.id);
     auditReq(req, 'user_delete', `删除用户「${target.username}」及其全部数据`);
     return res.redirect(back('/admin', `用户「${target.username}」已删除`));
   }

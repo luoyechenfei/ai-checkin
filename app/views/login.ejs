@@ -16,9 +16,9 @@
       <%- include('partials/captcha', { captchaId }) %>
       <button class="btn primary block" type="submit">登 录</button>
     </form>
-    <% if (allowRegister) { %>
-      <p class="auth-foot">还没有账号？<a href="/register">注册新用户</a></p>
-    <% } %>
+    <p class="auth-foot">
+      <% if (allowRegister) { %>还没有账号？<a href="/register">注册新用户</a> · <% } %><a href="/forgot">忘记密码？</a>
+    </p>
   </div>
 </div>
 

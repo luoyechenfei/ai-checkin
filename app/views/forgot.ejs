@@ -1,0 +1,55 @@
+<%- include('partials/header') %>
+
+<div class="auth-wrap">
+  <div class="card auth-card">
+    <h1 class="auth-title">找回密码</h1>
+    <p class="auth-sub"><%= siteName %></p>
+
+    <% if (step === 'user') { %>
+    <form method="post" action="/forgot" class="form">
+      <div class="field">
+        <label>用户名 <span class="req">*</span></label>
+        <input type="text" name="username" required autofocus>
+      </div>
+      <%- include('partials/captcha', { captchaId }) %>
+      <button class="btn primary block" type="submit">下一步</button>
+    </form>
+    <p class="auth-foot">已通过安全问题验证身份后即可重置密码。未设置安全问题的账号请联系管理员重置。</p>
+    <% } %>
+
+    <% if (step === 'answer') { %>
+    <form method="post" action="/forgot/answer" class="form">
+      <input type="hidden" name="token" value="<%= token %>">
+      <p class="hint">账号：<strong><%= username %></strong>，请回答设置的 3 个安全问题（答案不区分大小写）。</p>
+      <% questions.forEach((q, i) => { %>
+      <div class="field">
+        <label>问题 <%= i + 1 %>：<%= q %></label>
+        <input type="text" name="a<%= i + 1 %>" maxlength="100" required autocomplete="off" <%= i === 0 ? 'autofocus' : '' %>>
+      </div>
+      <% }) %>
+      <button class="btn primary block" type="submit">验证答案</button>
+    </form>
+    <p class="auth-foot">最多可尝试 5 次，链接 10 分钟内有效。</p>
+    <% } %>
+
+    <% if (step === 'reset') { %>
+    <form method="post" action="/forgot/reset" class="form">
+      <input type="hidden" name="token" value="<%= token %>">
+      <div class="field">
+        <label>新密码 <span class="req">*</span></label>
+        <input type="password" name="password" required minlength="6" autocomplete="new-password" autofocus>
+      </div>
+      <div class="field">
+        <label>确认新密码 <span class="req">*</span></label>
+        <input type="password" name="password2" required minlength="6" autocomplete="new-password">
+      </div>
+      <button class="btn primary block" type="submit">重置密码</button>
+    </form>
+    <p class="auth-foot">重置成功后所有已登录会话将失效，请使用新密码重新登录。</p>
+    <% } %>
+
+    <p class="auth-foot"><a href="/login">返回登录</a></p>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

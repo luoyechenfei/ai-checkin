@@ -101,6 +101,49 @@ router.get('/register', (req, res) => {
   render(req, res, 'register', { title: '注册', captchaId: c.id });
 });
 
+// ---------- 找回密码（安全问题验证，无需登录） ----------
+function getValidReset(token, needVerified) {
+  const r = db.prepare('SELECT * FROM password_resets WHERE token = ?').get(String(token || ''));
+  if (!r || r.expires_at <= getNow()) return null;
+  if (needVerified && !r.verified) return null;
+  return r;
+}
+
+router.get('/forgot', (req, res) => {
+  if (req.user) return res.redirect('/dashboard');
+  const c = captcha.create();
+  render(req, res, 'forgot', { title: '找回密码', step: 'user', captchaId: c.id });
+});
+
+router.get('/forgot/answer', (req, res) => {
+  if (req.user) return res.redirect('/dashboard');
+  const r = getValidReset(req.query.token, false);
+  if (!r || r.verified) return res.redirect('/forgot?msg=' + encodeURIComponent('链接无效或已过期，请重新申请') + '&type=err');
+  const u = db.prepare('SELECT username, sec_q1, sec_q2, sec_q3 FROM users WHERE id = ?').get(r.user_id);
+  if (!u) return res.redirect('/forgot?msg=' + encodeURIComponent('账号不存在') + '&type=err');
+  render(req, res, 'forgot', {
+    title: '找回密码', step: 'answer', token: r.token,
+    username: u.username, questions: [u.sec_q1, u.sec_q2, u.sec_q3]
+  });
+});
+
+router.get('/forgot/reset', (req, res) => {
+  if (req.user) return res.redirect('/dashboard');
+  const r = getValidReset(req.query.token, true);
+  if (!r) return res.redirect('/forgot?msg=' + encodeURIComponent('链接无效、未通过验证或已过期，请重新申请') + '&type=err');
+  render(req, res, 'forgot', { title: '找回密码', step: 'reset', token: r.token });
+});
+
+// ---------- 账号设置（修改密码 / 安全问题） ----------
+router.get('/password', requireAuth, (req, res) => {
+  const u = db.prepare('SELECT sec_q1, sec_q2, sec_q3 FROM users WHERE id = ?').get(req.user.id);
+  render(req, res, 'password', {
+    title: '账号设置',
+    hasQuestions: req.user.hasQuestions,
+    questions: [u.sec_q1 || '', u.sec_q2 || '', u.sec_q3 || '']
+  });
+});
+
 // ---------- 仪表盘 ----------
 router.get('/dashboard', requireAuth, (req, res) => {
   const now = getNow();

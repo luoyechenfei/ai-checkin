@@ -2,7 +2,7 @@
 const express = require('express');
 const path = require('path');
 const config = require('./config');
-const { attachUser, requireSetup } = require('./security');
+const { attachUser, requireSetup, requireSecurityQuestions } = require('./security');
 const scheduler = require('./scheduler');
 
 const app = express();
@@ -40,6 +40,7 @@ app.use('/public', express.static(path.join(__dirname, 'public'), {
 
 app.use(attachUser);
 app.use(requireSetup);
+app.use(requireSecurityQuestions);
 
 app.use(require('./routes/pages'));
 app.use(require('./routes/actions'));

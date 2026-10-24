@@ -52,7 +52,7 @@ function attachUser(req, res, next) {
   const token = req.cookies && req.cookies[config.SESSION_COOKIE];
   if (token) {
     const row = db.prepare(`
-      SELECT u.id, u.username, u.is_admin, u.status, u.theme, s.expires_at
+      SELECT u.id, u.username, u.is_admin, u.status, u.theme, u.sec_q1, s.expires_at
       FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token = ?`).get(token);
     if (row) {
@@ -63,7 +63,8 @@ function attachUser(req, res, next) {
           id: row.id,
           username: row.username,
           isAdmin: !!row.is_admin,
-          theme: row.theme || 'auto'
+          theme: row.theme || 'auto',
+          hasQuestions: !!row.sec_q1
         };
       }
     }
@@ -95,6 +96,14 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// 已登录但未设置找回密码安全问题的用户，强制先完成设置
+const SEC_Q_WHITELIST = ['/password', '/logout', '/prefs/theme', '/public', '/captcha'];
+function requireSecurityQuestions(req, res, next) {
+  if (!req.user || req.user.hasQuestions) return next();
+  if (SEC_Q_WHITELIST.some(p => req.path === p || req.path.startsWith(p + '/'))) return next();
+  return res.redirect('/password?msg=' + encodeURIComponent('为保障账号安全，请先设置 3 个找回密码的安全问题') + '&type=err');
+}
+
 function addDays(dateStr, days) {
   // 入参是“按设置时区格式化好的墙上时间”，不含时区信息。
   // 统一按 UTC 解析/格式化，避免受容器本地时区影响产生偏移。
@@ -107,6 +116,6 @@ function addDays(dateStr, days) {
 module.exports = {
   hashPassword, verifyPassword,
   createSession, destroySession, purgeExpiredSessions,
-  attachUser, requireSetup, requireAuth, requireAdmin,
+  attachUser, requireSetup, requireAuth, requireAdmin, requireSecurityQuestions,
   addDays
 };

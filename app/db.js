@@ -88,6 +88,16 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   ip         TEXT,
   created_at TEXT NOT NULL
 );
+
+-- 找回密码的一次性令牌（10 分钟有效，回答 3 个安全问题全部正确后才可重置）
+CREATE TABLE IF NOT EXISTS password_resets (
+  token      TEXT PRIMARY KEY,
+  user_id    INTEGER NOT NULL,
+  verified   INTEGER NOT NULL DEFAULT 0,   -- 0 待回答问题 1 已通过验证
+  attempts   INTEGER NOT NULL DEFAULT 0,   -- 答案错误次数（最多 5 次）
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
 `);
 
 /** 增量迁移：为旧数据库补列（SQLite 无 ADD COLUMN IF NOT EXISTS） */
@@ -105,6 +115,11 @@ ensureColumn('users', 'theme', "TEXT NOT NULL DEFAULT 'auto'");
 ensureColumn('notifications', 'broadcast_id', 'INTEGER');
 // 通知级别（系统广播使用 info/warn/err 区分普通、重要、紧急）
 ensureColumn('notifications', 'level', "TEXT NOT NULL DEFAULT 'info'");
+// 找回密码的 3 个安全问题与答案（答案以 scrypt 哈希存储）
+for (let i = 1; i <= 3; i++) {
+  ensureColumn('users', `sec_q${i}`, 'TEXT');
+  ensureColumn('users', `sec_a${i}`, 'TEXT');
+}
 
 // 索引必须在补列迁移之后创建（旧库的 notifications 表可能还没有 broadcast_id）
 db.exec(`
