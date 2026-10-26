@@ -416,12 +416,10 @@ const REGISTRY = {
       if (json && typeof json === 'object') {
         const code = json.code;
         const checkedIn = json.checked_in === true || json.checked_in === 'true';
+        // 仅取基础积分 credits；extra_credits 为抽奖/活动展示值，非实际到账积分
         const credits = toNumber(json.credits) || toNumber(json.data?.credits) || 0;
-        const extraCredits = toNumber(json.extra_credits) || toNumber(json.data?.extra_credits) || 0;
-        const points = credits + extraCredits;
-        
         if (code === 0 || checkedIn) {
-          return { success: true, points, message: withPoints('签到成功', points) };
+          return { success: true, points: credits, message: withPoints('签到成功', credits) };
         }
         if (code === 9095 || code === 9004) {
           // 9004/9095：本设备当日已签过，视为今日已完成（不计为失败）
@@ -925,12 +923,11 @@ async function runCheckin(account, trigger) {
         signal: AbortSignal.timeout(10000)
       });
       const st = adapter.parseStatusResponse(sres.status, await sres.text());
-      const base = st.credits || 0;
-      const extra = st.extraCredits || 0;
-      const p = base + extra;
+      // 仅取基础积分 credits；extra_credits 为抽奖/活动展示值，非实际到账积分
+      const p = st.credits || 0;
       if (p > 0) {
         result.points = p;
-        result.message = `${result.message}，获得 ${p} 积分` + (extra > 0 ? `（基础 ${base} + 额外 ${extra}）` : '');
+        result.message = `${result.message}，获得 ${p} 积分`;
       }
     } catch (e) { /* 积分补全失败不影响签到结果 */ }
   }
