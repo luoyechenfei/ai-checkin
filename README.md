@@ -147,11 +147,12 @@ services:
 > - Trae 客户端使用自研网络通道，客户端内 DevTools 的 Network 面板抓不到请求，请用浏览器网页版操作
 > - 该会话 Token 有效期约 **12 小时**，失效后按上述步骤重新获取即可；失效时系统会记录失败并通知
 
-**WorkBuddy Access Token 获取步骤（已实测验证）**：
+**WorkBuddy Access Token 获取步骤（2026-10 实测：WorkBuddy 5.9.3 / Electron 37）**：
 
-WorkBuddy 是 Electron 桌面应用，Token 加密保存在客户端内存中（磁盘上为密文），只能通过抓包获取：
+WorkBuddy 是 Electron 桌面应用，Token 保存在客户端进程内存中（磁盘为密文，无法直接读取），需通过 Chrome DevTools 协议（CDP）获取：
 
-1. **完全退出 WorkBuddy**：右键系统托盘图标 → 退出；再打开任务管理器（`Ctrl+Shift+Esc`），确认无 `WorkBuddy.exe` 残留
+1. **完全退出 WorkBuddy**：右键系统托盘图标 → 退出；再打开任务管理器（`Ctrl+Shift+Esc`），搜索 `WorkBuddy`，结束**所有**残留进程（含更新器进程）。
+   > 这一步最关键：WorkBuddy 是单实例应用，已有实例在运行时，命令行新加的启动参数会被忽略，调试端口不会开启——这是“9223 打不开”的最常见原因。
 2. **确认安装路径**：常见位置如下，找不到时在开始菜单搜 WorkBuddy → 右键 → 打开文件所在位置 → 右键快捷方式 → 属性 → 看「目标」中的路径
    - `C:\Users\你的用户名\AppData\Local\Programs\workbuddy\WorkBuddy.exe`
    - `C:\Program Files\WorkBuddy\WorkBuddy.exe`
@@ -159,26 +160,44 @@ WorkBuddy 是 Electron 桌面应用，Token 加密保存在客户端内存中（
 3. **带调试端口启动**（三选一，路径换成你自己的）：
    - **方法 A（最简单）**：按 `Win+R`，粘贴后回车：
      ```
-     "C:\Users\你的用户名\AppData\Local\Programs\workbuddy\WorkBuddy.exe" --remote-debugging-port=9223
+     "D:\WorkBuddy\WorkBuddy.exe" --remote-debugging-port=9223
      ```
    - **方法 B（PowerShell）**：
      ```powershell
-     & "C:\Users\你的用户名\AppData\Local\Programs\workbuddy\WorkBuddy.exe" --remote-debugging-port=9223
+     & "D:\WorkBuddy\WorkBuddy.exe" --remote-debugging-port=9223
      ```
    - **方法 C（CMD）**：
      ```cmd
-     "C:\Users\你的用户名\AppData\Local\Programs\workbuddy\WorkBuddy.exe" --remote-debugging-port=9223
+     "D:\WorkBuddy\WorkBuddy.exe" --remote-debugging-port=9223
      ```
-4. 浏览器打开 `http://127.0.0.1:9223`，进入调试页面后切到 **Network** 面板
-5. 在 WorkBuddy 客户端内任意操作（或刷新页面），找到发往 `www.workbuddy.cn/v2/...` 的请求
-6. 复制请求头 `Authorization: Bearer` 后面的整串 Token 填入本系统
-7. 「用户 ID」为 Token 载荷中的 `sub` 字段（UUID），一般可留空
+   > 必须用命令行启动；直接双击图标/快捷方式不会带上参数。
+4. **验证端口是否真的开启**：浏览器打开 `http://127.0.0.1:9223/json/list`
+   - 返回一段 JSON 且包含 `"title": "WorkBuddy"` → 端口已生效，可继续
+   - 直接打开 `http://127.0.0.1:9223` 显示空白/404 属于**正常现象**：该地址本身不提供页面，不能用它判断端口失败
+5. **打开调试界面**：复制上一步 JSON 里的 `devtoolsFrontendUrl` 在浏览器打开；或直接访问
+   `http://127.0.0.1:9223/devtools/inspector.html?ws=127.0.0.1:9223/devtools/page/<JSON 中的 id>`
+   进入后切到 **Console** 面板
+6. **一行命令直接取 Token**（2026-10 实测 WorkBuddy 5.9.3 可用）：在 Console 输入
+   ```js
+   await wb.account.token()
+   ```
+   回车后返回一整串以 `eyJ` 开头的 JWT（约 1490 字符），这就是 Access Token，右键复制即可
+7. 粘贴到「Access Token」；「用户 ID」可留空（系统会自动解析），也可填 JWT 第二段解码出的 `sub`（UUID）
+8. **备用方案**（Console 命令因版本升级失效时）：切到 **Network** 面板，勾选 `Preserve log` 并过滤 `workbuddy.cn`，在客户端内打开积分/签到页，找到 `www.workbuddy.cn/v2/...` 请求，复制 `Authorization: Bearer` 后面的整串
 
-> **提示**：若 9223 端口被占用，换个端口号（如 9224、9333）即可，启动命令和访问地址都要同步改。
+**端口仍然打不开时**：
+- 用 `netstat -ano | findstr 9223` 检查是否有监听；无监听基本都是旧实例未完全退出（参数未生效）
+- 换端口重试（如 9224、9333），启动命令与访问地址同步改
+- 仍不行时追加参数：`--remote-debugging-port=9223 --remote-allow-origins=*`
+- 确认没有被安全软件拦截本地回环调试端口
 
 > **注意**：该 Token 为 Keycloak JWT，有效期约 **28 天**，远长于 Trae 的会话 Token，配置一次可稳定使用较久。
 >
-> **自动续期（可选）**：如需开启自动续期，请同时填入 Refresh Token。在 WorkBuddy 本地登录态文件中查找 `refreshToken` 字段（`%APPDATA%\workbuddy-desktop` 或应用数据目录下的 `.info`/`.json` 文件），复制 `refreshToken` 值填入「Refresh Token」字段，再勾选「启用自动续期」。系统会在 Token 到期前自动调用刷新接口续期，无需手动重新抓包。刷新接口为 `copilot.tencent.com/v2/plugin/auth/token/refresh`。
+> **自动续期（可选）**：WorkBuddy 渲染进程桥接只暴露 Access Token，拿不到 Refresh Token。如需自动续期，用上面的 **Network** 备用方案抓 `copilot.tencent.com/v2/plugin/auth/token/refresh` 请求：
+> - 请求头 `X-Refresh-Token` 的值即 Refresh Token
+> - 响应 JSON 中 `data.refreshToken` 是轮换后的新 Refresh Token（优先填这个）
+>
+> 填入「Refresh Token」并勾选「启用自动续期」后，系统会在到期前自动调用该接口续期。若抓不到，保持默认手动模式即可：Token 有效期约 28 天，系统内账号授权保持 7 天，到期前重新获取一次。
 
 **CodeBuddy Access Token 获取步骤**：
 
