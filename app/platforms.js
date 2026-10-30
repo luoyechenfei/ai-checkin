@@ -449,10 +449,9 @@ const REGISTRY = {
     id: 'workbuddy',
     name: 'WorkBuddy',
     desc: '腾讯 WorkBuddy AI 编程助手（桌面端）',
-    help: '获取 Access Token（WorkBuddy 5.9.3 / Electron 37 实测）：WorkBuddy 是 Electron 应用，Token 只存在内存中，需通过调试端口获取。①完全退出 WorkBuddy：托盘退出并在任务管理器结束所有 WorkBuddy 进程（单实例运行会忽略新参数，这是端口打不开的最常见原因）；②命令行启动（Win+R 或终端）："D:\\WorkBuddy\\WorkBuddy.exe" --remote-debugging-port=9223（路径按实际安装位置）；③验证端口：浏览器打开 http://127.0.0.1:9223/json/list，返回含 "title": "WorkBuddy" 的 JSON 即成功——直接打开 http://127.0.0.1:9223 空白/404 属正常；④从该 JSON 复制 devtoolsFrontendUrl 打开调试界面（或访问 http://127.0.0.1:9223/devtools/inspector.html?ws=127.0.0.1:9223/devtools/page/<id>），切到 Console，执行 await wb.account.token()，返回的 eyJ 开头 JWT 即 Access Token，复制填入；⑤用户 ID 可留空（系统自动解析），或填 JWT 第二段解码的 sub（UUID）。Token 为 Keycloak JWT，有效期约 28 天。\n\n【备用取法】Console 命令因版本升级失效时：Network 面板勾选 Preserve log 并过滤 workbuddy.cn，从任意 www.workbuddy.cn/v2 请求的 Headers 复制 Authorization: Bearer 整串。\n\n【端口仍打不开】用 netstat -ano | findstr 9223 确认无监听（即旧实例未退干净）；或换端口 9224/9333，并追加 --remote-allow-origins=*。\n\n【自动续期】桥接只暴露 Access Token，拿不到 Refresh Token；如需启用，在 Network 面板过滤 copilot.tencent.com，抓 v2/plugin/auth/token/refresh——请求头 X-Refresh-Token 或响应 data.refreshToken（优先新值）填入并勾选「启用自动续期」；抓不到就保持手动模式（系统内授权保持 7 天，到期前重新获取）。',
+    help: '获取 Access Token（WorkBuddy 5.9.3 / Electron 37 实测，唯一可用方式）：WorkBuddy 是 Electron 应用，Token 只存在内存中，需通过调试端口读取。①完全退出 WorkBuddy：托盘退出并在任务管理器结束所有 WorkBuddy 进程（单实例运行会忽略新参数）；②命令行启动（Win+R 或 PowerShell）："D:\\WorkBuddy\\WorkBuddy.exe" --remote-debugging-port=9223（路径按实际安装位置）；③浏览器打开 http://127.0.0.1:9223/json/list，返回含 "title": "WorkBuddy" 的 JSON 即成功（直接打开 http://127.0.0.1:9223 空白/404 属正常）；④从该 JSON 复制 devtoolsFrontendUrl 打开调试界面，切到 Console，执行 await wb.account.token()，返回的 eyJ 开头 JWT 即 Access Token，复制填入；⑤用户 ID 可留空（系统自动解析），或填 JWT 第二段解码的 sub（UUID）。Token 为 Keycloak JWT，有效期约 28 天；系统内账号授权保持 7 天，到期前重新获取。桥接不提供 Refresh Token，不支持自动续期，保持手动模式即可。',
     fields: [
       { key: 'access_token', label: 'Access Token', type: 'password', required: true, placeholder: 'DevTools Console 执行 await wb.account.token() 得到的 JWT' },
-      { key: 'refresh_token', label: 'Refresh Token（可选，填后可自动续期）', type: 'password', required: false, placeholder: '抓包时 token/refresh 请求的 X-Refresh-Token 或响应的 data.refreshToken' },
       { key: 'uid', label: '用户 ID（可选）', type: 'text', required: false, placeholder: 'JWT 载荷中的 sub 字段（UUID），一般可留空' },
       { key: 'domain', label: '域名（可选）', type: 'select', required: false, options: ['https://www.workbuddy.cn', 'https://www.codebuddy.cn'], placeholder: '默认 https://www.workbuddy.cn' }
     ],
@@ -492,14 +491,6 @@ const REGISTRY = {
         headers,
         body: '{}'
       };
-    },
-    async refreshToken(cred) {
-      if (!cred.refresh_token) throw new Error('缺少 Refresh Token，无法自动续期');
-      const r = await tencentRefreshToken(cred.refresh_token);
-      const out = { access_token: r.access_token, refresh_token: r.refresh_token };
-      const expMs = jwtExp(r.access_token);
-      if (expMs) out.token_expires_at = new Date(expMs).toISOString();
-      return out;
     },
     parseResponse: (status, body) => {
       if (status === 401 || status === 403) {
