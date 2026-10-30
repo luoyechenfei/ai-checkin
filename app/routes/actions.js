@@ -284,6 +284,8 @@ router.post('/accounts', requireAuth, (req, res) => {
 
   // 自动续期：若账号具备 refresh_token，从 JWT 解析 token 到期时间（支持 Trae 的 token 与腾讯系的 access_token）
   const adapter = REGISTRY[platform];
+  // 部分平台（如 AiPy Pro）支持直接粘贴整段凭据 JSON，先做规范化
+  if (typeof adapter.normalizeCredentials === 'function') adapter.normalizeCredentials(cred);
   if (cred.refresh_token && typeof adapter.refreshToken === 'function') {
     const tokenStr = cred.token || cred.access_token || '';
     const expMs = jwtExp(tokenStr);
@@ -457,6 +459,7 @@ router.post('/accounts/:id/reauth', requireAuth, (req, res) => {
   if (!cred) return res.redirect(back('/accounts', '请完整填写平台必填凭据', 'err'));
   // 自动续期：若账号具备 refresh_token，从 JWT 解析 token 到期时间
   const reAdapter = REGISTRY[acc.platform];
+  if (typeof reAdapter.normalizeCredentials === 'function') reAdapter.normalizeCredentials(cred);
   if (cred.refresh_token && typeof reAdapter.refreshToken === 'function') {
     const tokenStr = cred.token || cred.access_token || '';
     const expMs = jwtExp(tokenStr);

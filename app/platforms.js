@@ -75,6 +75,38 @@ async function tencentRefreshToken(refreshTokenStr) {
   if (!accessToken) throw new Error('refresh 响应中未返回 accessToken');
   return { access_token: accessToken, refresh_token: newRefreshToken };
 }
+// AiPy Pro（Trustoken 账号）用 refresh_token 换新 access_token + refresh_token
+async function aipyRefreshToken(refreshTokenStr) {
+  const res = await fetch('https://www.trustoken.cn/api/oauth/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json',
+      'User-Agent': UA
+    },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshTokenStr,
+      client_id: 'aipy-pro'
+    }).toString(),
+    signal: AbortSignal.timeout(15000)
+  });
+  const text = await res.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch (e) { /* ignore */ }
+  const accessToken = json && (json.access_token || json.data?.access_token);
+  if (res.status !== 200 || !accessToken) {
+    const msg = json && (json.message || json.msg || json.error_description || json.error);
+    throw new Error(`refresh_token 刷新失败：${msg || `HTTP ${res.status}`}`);
+  }
+  const expiresIn = Number(json.expires_in || json.data?.expires_in) || 0;
+  return {
+    access_token: accessToken,
+    refresh_token: json.refresh_token || json.data?.refresh_token || refreshTokenStr,
+    token_expires_at: expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null
+  };
+}
+
 // 生成 Trae 设备：16 位数字 device_id、32 位 hex machine_id、ECDSA P-256 密钥对
 function traeGenDevice() {
   const deviceId = Array.from({ length: 16 }, (_, i) =>
@@ -816,6 +848,103 @@ const REGISTRY = {
         checked,
         hasClaimable: !!todayCampaign,
         campaignId: todayCampaign?.campaignId || todayCampaign?.id,
+        raw: data
+      };
+    }
+  },
+
+  aipy: {
+    id: 'aipy',
+    name: 'AiPy Pro',
+    desc: '爱派 AiPy Pro（Trustoken 账号，每日签到领灵石）',
+    help: '获取 Access Token（2026-10 实测：AiPy Pro 客户端 / Trustoken 账号）：登录凭证保存在客户端本地 SQLite 数据库的 meta 表中。①完全退出 AiPy Pro（右键托盘退出，并在任务管理器结束所有 AiPyPro 进程）；②Win+R 输入 %APPDATA% 打开资源管理器，进入 aipy-pro 目录，把 aipy、aipy-wal、aipy-shm 三个文件（后两个可能不存在）复制到任意临时目录；③用 SQLite 工具（如 DB Browser for SQLite）打开复制出的 aipy，执行 SELECT value FROM meta WHERE field = "trustoken-token"，复制查询结果中的整段 JSON；④把整段 JSON 直接粘贴到下方「Access Token / 登录凭证 JSON」，系统会自动识别其中的 access_token、refresh_token 与到期时间（推荐）；也可只粘贴 JSON 里的 access_token，并把 refresh_token 填到「Refresh Token」字段。填入 Refresh Token 后勾选「启用自动续期」，系统会在 Token 到期前自动刷新。签到每日 8:00-22:00 开放（非开放时段接口会返回“距离下轮签到开启”）。注意：Trustoken 的 Refresh Token 为一次性轮换，客户端与本系统同时使用同一凭据时，后刷新方会使另一方失效。',
+    fields: [
+      { key: 'access_token', label: 'Access Token / 登录凭证 JSON', type: 'textarea', required: true, placeholder: '推荐粘贴整段 JSON（含 access_token/refresh_token/expires_at）；也可只粘贴 access_token' },
+      { key: 'refresh_token', label: 'Refresh Token（可选，填后可自动续期）', type: 'password', required: false, placeholder: '同一 JSON 中的 refresh_token 字段' }
+    ],
+    defaultUrl: 'https://www.trustoken.cn/api/user/checkin',
+    statusUrl: 'https://www.trustoken.cn/api/user/checkin/status',
+    // 签到接口不返回奖励时，用状态接口补全当日灵石（由引擎写入签到记录）
+    pointsFromStatus: true,
+    // 允许把客户端 meta 中的整段 JSON 直接粘贴到 Access Token 字段
+    normalizeCredentials(cred) {
+      const raw = String((cred && cred.access_token) || '').trim();
+      if (raw.startsWith('{')) {
+        try {
+          const j = JSON.parse(raw);
+          if (j.access_token) cred.access_token = String(j.access_token);
+          if (j.refresh_token && !cred.refresh_token) cred.refresh_token = String(j.refresh_token);
+          const expMs = traeWhenOf(j.expires_at);
+          if (expMs) cred.token_expires_at = new Date(expMs).toISOString();
+        } catch (e) { /* 非 JSON 时按普通 Token 处理 */ }
+      }
+      return cred;
+    },
+    buildHeaders(cred) {
+      const headers = {
+        'User-Agent': UA,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Origin': 'https://www.trustoken.cn',
+        'Referer': 'https://www.trustoken.cn/'
+      };
+      if (cred.access_token) headers['Authorization'] = `Bearer ${cred.access_token}`;
+      return headers;
+    },
+    buildRequest(cred) {
+      return { url: this.defaultUrl, method: 'POST', headers: this.buildHeaders(cred), body: '{}' };
+    },
+    buildStatusRequest(cred) {
+      return { url: this.statusUrl, method: 'GET', headers: this.buildHeaders(cred) };
+    },
+    async refreshToken(cred) {
+      if (!cred.refresh_token) throw new Error('缺少 Refresh Token，无法自动续期');
+      const r = await aipyRefreshToken(cred.refresh_token);
+      const out = { access_token: r.access_token, refresh_token: r.refresh_token };
+      if (r.token_expires_at) out.token_expires_at = r.token_expires_at;
+      return out;
+    },
+    parseResponse(status, body) {
+      if (status === 401 || status === 403) {
+        return { success: false, authExpired: true, message: `授权已失效(HTTP ${status})，请重新登录授权` };
+      }
+      let json = null;
+      try { json = JSON.parse(body); } catch (e) { /* 非 JSON */ }
+      if (!json || typeof json !== 'object') {
+        return { success: false, message: `签到失败：HTTP ${status}` };
+      }
+      const msg = json.message || json.msg || '';
+      if (json.success === true) {
+        const reward = toNumber(json.data && json.data.today_total_reward) || 0;
+        const points = reward ? Math.round((reward / 5e5) * 100) / 100 : null;
+        return {
+          success: true,
+          points,
+          message: msg ? msg : (points ? `签到成功，获得 ${points} 灵石` : '签到成功')
+        };
+      }
+      if (/已签到|已经签到/.test(msg)) {
+        return { success: true, alreadyCheckedIn: true, message: msg || '今日已签到' };
+      }
+      if (/token 无效|未登录|无权进行此操作|失效|无效/.test(msg)) {
+        return { success: false, authExpired: true, message: msg || '授权已失效，请重新登录授权' };
+      }
+      return { success: false, message: msg || `签到失败：HTTP ${status}` };
+    },
+    parseStatusResponse(status, body) {
+      if (status !== 200) return { checked: null, error: `HTTP ${status}` };
+      let json = null;
+      try { json = JSON.parse(body); } catch (e) { return { checked: null, error: '非 JSON 响应' }; }
+      if (!json || json.success === false) {
+        return { checked: null, error: (json && (json.message || json.msg)) || '授权已失效' };
+      }
+      const data = (json && json.data) || {};
+      const reward = toNumber(data.today_total_reward) || 0;
+      return {
+        checked: data.checked_in_today === true,
+        credits: reward ? Math.round((reward / 5e5) * 100) / 100 : 0,
+        cycleDay: toNumber(data.cycle_day) || 0,
+        canSign: data.can_sign === true,
         raw: data
       };
     }

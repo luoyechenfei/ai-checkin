@@ -1,14 +1,14 @@
 # AI 签到助手（AI-Checkin）
 
-一款 Docker 自部署的**多平台 AI 应用自动签到系统**，内置 Trae、WorkBuddy、CodeBuddy、ZCode、Qoder 五大主流 AI 编程平台适配器，另支持自定义平台接入任意服务，内置 SQLite 存储，无需外部数据库。
+一款 Docker 自部署的**多平台 AI 应用自动签到系统**，内置 Trae、WorkBuddy、CodeBuddy、ZCode、Qoder、AiPy Pro 六大主流 AI 编程平台适配器，另支持自定义平台接入任意服务，内置 SQLite 存储，无需外部数据库。
 
 ## 功能特性
 
-- **多平台签到**：内置 **Trae / WorkBuddy / CodeBuddy / ZCode / Qoder** 五大平台适配器（真实接口配置，参考公开实现），另提供「自定义平台」接入任意平台
-- **每日签到 + 活动领取双模式**：Trae / WorkBuddy / CodeBuddy 为每日签到；ZCode / Qoder 为活动领取制（Qoder 每日 10:00 后可领 100 Credits）
+- **多平台签到**：内置 **Trae / WorkBuddy / CodeBuddy / ZCode / Qoder / AiPy Pro** 六大平台适配器（真实接口配置，参考公开实现），另提供「自定义平台」接入任意平台
+- **每日签到 + 活动领取双模式**：Trae / WorkBuddy / CodeBuddy / AiPy Pro 为每日签到；ZCode / Qoder 为活动领取制（Qoder 每日 10:00 后可领 100 Credits）
 - **每日定时签到**：每个账号可单独设置签到时间（默认 08:00），到点自动执行
 - **授权保持与自动登出**：平台授权登录后保持 **7 天**，到期自动登出（清除本地凭据）并通过站内通知提醒重新授权
-- **自动续期（可选）**：Trae 支持「OAuth 扫码授权」自动获取 Refresh Token；CodeBuddy 支持手动填入 Refresh Token。开启后系统在 Token 到期前自动刷新，无需手动更新；WorkBuddy 桥接不提供 Refresh Token，仅支持手动更新；未开启时保持原有 7 天登出规则不变
+- **自动续期（可选）**：Trae 支持「OAuth 扫码授权」自动获取 Refresh Token；CodeBuddy、AiPy Pro 支持手动填入 Refresh Token。开启后系统在 Token 到期前自动刷新，无需手动更新；WorkBuddy 桥接不提供 Refresh Token，仅支持手动更新；未开启时保持原有 7 天登出规则不变
 - **多用户注册**：可开关的开放注册，每位用户独立管理自己的平台账号、记录与通知
 - **首次初始化向导**：首次访问自动进入初始化页，设置管理员账号密码、站点名称、默认签到时间、时区、端口等
 - **端口自定义**：内部端口（容器内监听）与外部端口（宿主机映射）均可自定义
@@ -116,6 +116,7 @@ services:
 | **CodeBuddy**（腾讯） | 每日签到 | `Authorization: Bearer {access_token}` | Access Token | 用户 ID、Refresh Token |
 | **ZCode**（智谱 Z.ai） | 活动领取 | `Authorization: Bearer {jwt_token}` | JWT Token | 设备 MID、应用版本 |
 | **Qoder**（阿里） | 活动领取 | `Authorization: Bearer {token}` | Access Token | Refresh Token |
+| **AiPy Pro**（Trustoken） | 每日签到 | `Authorization: Bearer {access_token}` | Access Token / 凭据 JSON | Refresh Token |
 
 **Token 获取通用方法**：登录对应平台客户端或网页版 → F12 开发者工具 → Network 面板 → 找任意已登录请求，复制其 `Authorization` 头中的 Token 值。
 
@@ -213,7 +214,25 @@ CodeBuddy 与 WorkBuddy 同为腾讯系、接口格式一致，优先使用网�
 
 > Qoder 服务端每日 **10:00（UTC+8）** 后才刷新当日额度，请把该账号的签到时间设置在 10:00 之后。
 
-> 以上 ZCode / Qoder 的接口地址、请求头与响应判定均已按现有适配器实现核对；由于各平台接口可能随版本调整，若签到失败可抓包后用「签到接口地址」覆盖默认值，或改用「自定义平台」接入。
+**AiPy Pro（爱派）Access Token 获取步骤（2026-10 实测）**：
+
+主页 <https://www.aipyaipy.com/>，签到入口在 Windows 客户端「我的」页面（默认安装路径 `D:\AiPyPro\AiPyPro.exe`）。AiPy Pro 为 Electron 客户端，登录凭证（Trustoken 账号）保存在本地 SQLite 数据库的 `meta` 表，实测唯一可靠的方式是离线读取：
+
+1. **完全退出 AiPy Pro**：右键托盘图标退出，并打开任务管理器（`Ctrl+Shift+Esc`）搜索 `AiPyPro`，结束所有残留进程（数据库运行中被占用，复制会失败）。
+2. 按 `Win+R` 输入 `%APPDATA%` 回车，进入 `aipy-pro` 目录，把 `aipy`、`aipy-wal`、`aipy-shm` 三个文件（后两个可能不存在）复制到任意临时目录。
+3. 用 SQLite 工具（如 [DB Browser for SQLite](https://sqlitebrowser.org/)）打开复制出的 `aipy`，执行：
+   ```sql
+   SELECT value FROM meta WHERE field = 'trustoken-token';
+   ```
+   查询结果是一段 JSON，包含 `access_token`、`refresh_token`、`expires_at`。
+4. **推荐**：把整段 JSON 直接粘贴到「Access Token / 登录凭证 JSON」，系统会自动识别 `access_token`、`refresh_token` 与到期时间；也可只粘贴 JSON 里的 `access_token`，并把 `refresh_token` 填到「Refresh Token」字段。
+5. 填入 Refresh Token 后勾选「启用自动续期」，系统会在 Token 到期前调用 `https://www.trustoken.cn/api/oauth/token` 自动刷新，无需手动更新。
+
+> AiPy Pro 签到每日 **8:00-22:00** 开放，奖励为「灵石」（`500000` 额度 = 1 灵石）；非开放时段接口返回「距离下轮签到开启还有 X 个小时」，属正常提示，请把签到时间设置在开放时段内。
+
+> **注意**：Trustoken 的 Refresh Token 为一次性轮换（刷新成功后旧 Refresh Token 立即失效）。若 AiPy Pro 客户端与本系统同时使用同一份凭据，后刷新的一方会使先刷新的一方失效。开启自动续期后如客户端提示重新登录，按上方步骤重新读取一次凭据并重新授权即可；日常建议以本系统自动续期为准。
+
+> 以上 ZCode / Qoder / AiPy Pro 的接口地址、请求头与响应判定均已按现有适配器实现核对；由于各平台接口可能随版本调整，若签到失败可抓包后用「签到接口地址」覆盖默认值，或改用「自定义平台」接入。
 
 ### 各平台说明
 
@@ -221,6 +240,7 @@ CodeBuddy 与 WorkBuddy 同为腾讯系、接口格式一致，优先使用网�
 - **WorkBuddy / CodeBuddy**：同一套接口格式，域名不同；WorkBuddy 账号可通过「域名」字段切换到 codebuddy.cn 域名；返回「已签到」（code=10001）视为成功，code=41000 表示活动未开始
 - **ZCode**：非每日签到，而是**套餐领取制**，有可领套餐时执行领取；已领完（code=1003）或名额耗尽（code=1005）会记录为对应提示
 - **Qoder**：**每日领取 100 Credits**，服务端每日 **10:00（UTC+8）** 刷新额度；系统采用两步流程：先获取活动列表，再对当日未领取的活动执行领取；建议将签到时间设置在 10:00 之后
+- **AiPy Pro**：每日 **8:00-22:00** 在 `www.trustoken.cn` 签到领「灵石」；奖励按 `500000` 额度 = 1 灵石换算展示；支持 Refresh Token 自动续期
 
 ### 自定义平台
 
