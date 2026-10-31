@@ -2,6 +2,19 @@
 
 一款 Docker 自部署的**多平台 AI 应用自动签到系统**，内置 Trae、WorkBuddy、CodeBuddy、ZCode、Qoder、AiPy Pro 六大主流 AI 编程平台适配器，另支持自定义平台接入任意服务，内置 SQLite 存储，无需外部数据库。
 
+> ### 🔑 Token 获取（推荐方式）
+>
+> **优先使用 [AI Token 小助手](https://github.com/luoyechenfei/ai-checkin/releases)** —— Windows 桌面小工具，双击即用：
+>
+> - 支持 Trae / WorkBuddy / CodeBuddy / ZCode / Qoder / AiPy Pro 全部六个平台
+> - 打开对应平台页签，点击「获取 Token」即可自动读取 / 抓取本机登录凭据
+> - **自动复制到剪贴板**，直接粘贴到本站「平台账号」对应字段即可
+> - 全部操作在本机完成，不会上传任何数据
+>
+> 👉 下载地址：[GitHub Releases](https://github.com/luoyechenfei/ai-checkin/releases)（下载最新版的 `AI-Token-Helper-x.x.x.zip`，解压后双击 `AI Token 小助手.exe`）
+>
+> 如不便使用工具，也可参考下方各平台的手动获取说明。
+
 ## 功能特性
 
 - **多平台签到**：内置 **Trae / WorkBuddy / CodeBuddy / ZCode / Qoder / AiPy Pro** 六大平台适配器（真实接口配置，参考公开实现），另提供「自定义平台」接入任意平台
