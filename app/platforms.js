@@ -915,8 +915,9 @@ const REGISTRY = {
       }
       const msg = json.message || json.msg || '';
       if (json.success === true) {
+        // 实测：5000 额度 = 1 灵石（免费版每日签到 500000 额度 = 100 灵石）
         const reward = toNumber(json.data && json.data.today_total_reward) || 0;
-        const points = reward ? Math.round((reward / 5e5) * 100) / 100 : null;
+        const points = reward ? Math.round((reward / 5e3) * 100) / 100 : null;
         return {
           success: true,
           points,
@@ -939,10 +940,11 @@ const REGISTRY = {
         return { checked: null, error: (json && (json.message || json.msg)) || '授权已失效' };
       }
       const data = (json && json.data) || {};
+      // 实测：5000 额度 = 1 灵石（免费版每日签到 500000 额度 = 100 灵石）
       const reward = toNumber(data.today_total_reward) || 0;
       return {
         checked: data.checked_in_today === true,
-        credits: reward ? Math.round((reward / 5e5) * 100) / 100 : 0,
+        credits: reward ? Math.round((reward / 5e3) * 100) / 100 : 0,
         cycleDay: toNumber(data.cycle_day) || 0,
         canSign: data.can_sign === true,
         raw: data

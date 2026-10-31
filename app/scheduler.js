@@ -9,6 +9,7 @@ const config = require('./config');
 const { db, getSetting, getNow, notify } = require('./db');
 const { purgeExpiredSessions } = require('./security');
 const { runCheckin, refreshAccountToken } = require('./platforms');
+const { zonedFormat } = require('./util');
 
 let timer = null;
 let lastSweepDay = null;
@@ -57,8 +58,11 @@ function tick() {
       ).get(acc.id, todayStart);
       if (last && last.success === 1) continue;
       if (last) {
-        const lastMs = Date.parse(last.created_at.replace(' ', 'T') + 'Z');
-        if (nowMs - lastMs < config.RETRY_MINUTES * 60000) continue;
+        // created_at 与 now 同为本地时区格式，统一转同时区字符串比较；
+        // 不能把 created_at 当 UTC 解析，否则冷却后移 8 小时导致当天永远不再重试
+        const tz = getSetting('timezone', config.DEFAULT_TIMEZONE);
+        const retryBefore = zonedFormat(tz, new Date(nowMs - config.RETRY_MINUTES * 60000));
+        if (last.created_at > retryBefore) continue;
       }
       runCheckin(acc, 'scheduled').catch(err => console.error('[scheduler] 签到异常:', err.message));
     }
