@@ -3,7 +3,8 @@ name: Build and Publish Docker Image
 on:
   push:
     branches: [main, master]
-    tags: ["v*"]
+    # 服务器镜像专用标签前缀，避免与小助手发版使用的 v1.0.x 标签混淆
+    tags: ["server-v*"]
   workflow_dispatch:
 
 env:
@@ -41,8 +42,9 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=tag
+            type=match,pattern=server-v(.*),group=1
+            type=match,pattern=server-v(\d+\.\d+),group=1
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
 

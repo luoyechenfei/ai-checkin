@@ -80,7 +80,7 @@ docker run -d \
 
 ### 使用已发布的镜像（GitHub Container Registry）
 
-推送到 `main` 分支或打 `v*` 标签后，GitHub Actions 会自动构建 `linux/amd64` 与 `linux/arm64` 双架构镜像并发布到 GHCR：
+推送到 `main` 分支或打 `server-v*` 标签（如 `server-v1.4.0`）后，GitHub Actions 会自动构建 `linux/amd64` 与 `linux/arm64` 双架构镜像并发布到 GHCR：
 
 ```bash
 # 镜像地址：ghcr.io/<你的GitHub用户名或组织>/ai-checkin:latest
@@ -106,6 +106,29 @@ services:
 
 > 首次发布后，需在 GitHub 仓库的 **Packages** 页面把镜像可见性设为 `Public`（默认是 Private，需 `docker login ghcr.io` 才能拉取）。
 
+### 更新部署（升级到最新镜像）
+
+服务器代码推送到 `main` 分支后，GitHub Actions 会自动重建镜像；线上实例执行以下命令即可升级：
+
+```bash
+cd ai-checkin
+docker compose pull
+docker compose up -d
+```
+
+> `docker-compose.yml` 已设置 `pull_policy: always`，`docker compose up -d` 也会自动拉取最新镜像。
+> 账号与签到记录保存在 `./data` 卷中，升级不会清空；升级前建议先备份 `data` 目录。
+
+**服务器版本标签约定**：
+
+- 需要固定服务器版本时，打 `server-v*` 标签（如 `server-v1.4.0`），会构建并发布 `1.4.0`、`1.4`、`server-v1.4.0` 等镜像标签
+- `v1.0.x` 系列标签用于 [AI Token 小助手](https://github.com/luoyechenfei/ai-checkin/releases) 发版，**不会**触发服务器镜像构建
+- 固定版本部署时可指定 `IMAGE_TAG`：
+
+```bash
+IMAGE_TAG=1.4.0 docker compose up -d
+```
+
 ## 初始化向导
 
 首次访问 `/setup`，依次设置：
@@ -128,7 +151,7 @@ services:
 | **WorkBuddy**（腾讯） | 每日签到 | `Authorization: Bearer {access_token}` | Access Token | 用户 ID、域名 |
 | **CodeBuddy**（腾讯） | 每日签到 | `Authorization: Bearer {access_token}` | Access Token | 用户 ID、Refresh Token |
 | **ZCode**（智谱 Z.ai） | 活动领取 | `Authorization: Bearer {jwt_token}` | JWT Token | 设备 MID、应用版本 |
-| **Qoder**（阿里） | 活动领取 | `Authorization: Bearer {token}` | Access Token | Refresh Token |
+| **Qoder**（阿里） | 活动领取 | `Authorization: Bearer {token}` | Access Token | — |
 | **AiPy Pro**（Trustoken） | 每日签到 | `Authorization: Bearer {access_token}` | Access Token / 凭据 JSON | Refresh Token |
 
 **Token 获取通用方法**：登录对应平台客户端或网页版 → F12 开发者工具 → Network 面板 → 找任意已登录请求，复制其 `Authorization` 头中的 Token 值。
@@ -223,7 +246,7 @@ CodeBuddy 与 WorkBuddy 同为腾讯系、接口格式一致，优先使用网�
 2. 按 `F12` 打开开发者工具 → **Network（网络）** 面板，过滤 `openapi.qoder.com.cn`
 3. 按 `F5` 刷新后点击任意发往 `openapi.qoder.com.cn` 的请求
 4. 打开 **Headers → Request Headers**，复制 `Authorization: Bearer` 后面的整串 Token，填入「Access Token」
-5. 「Refresh Token」可留空；Token 失效时接口返回 401，系统会自动标记授权失效并提示重新授权
+5. Token 失效时接口返回 401，系统会自动标记授权失效并提示重新授权；Qoder 暂不支持自动续期，无需填写 Refresh Token
 
 > Qoder 服务端每日 **10:00（UTC+8）** 后才刷新当日额度，请把该账号的签到时间设置在 10:00 之后。
 
