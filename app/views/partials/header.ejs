@@ -49,12 +49,15 @@
   </div>
 </header>
 <% } else { %>
-<div class="theme-corner">
-  <select id="themeSelect" class="theme-select" aria-label="主题模式">
-    <option value="auto">跟随系统</option>
-    <option value="light">浅色</option>
-    <option value="dark">深色</option>
-  </select>
+<div class="guest-bar">
+  <a class="brand" href="/login"><span class="brand-dot">✓</span><span><%= siteName %></span></a>
+  <div class="theme-corner">
+    <select id="themeSelect" class="theme-select" aria-label="主题模式">
+      <option value="auto">跟随系统</option>
+      <option value="light">浅色</option>
+      <option value="dark">深色</option>
+    </select>
+  </div>
 </div>
 <% } %>
 <main class="container">

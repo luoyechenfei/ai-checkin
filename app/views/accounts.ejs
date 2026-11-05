@@ -33,7 +33,7 @@
         <% if (p.id === 'trae') { %>
           <%- include('partials/trae-oauth') %>
         <% } else if (registry[p.id] && typeof registry[p.id].refreshToken === 'function') { %>
-          <div class="field" style="margin-top:8px;">
+          <div class="field">
             <label class="check-line">
               <input type="checkbox" name="auto_renew" value="1"> 启用自动续期（需已填入 Refresh Token，Token 到期前系统自动刷新）
             </label>
@@ -56,13 +56,14 @@
 <div class="card account-card <%= a.expired ? 'is-expired' : '' %>">
   <div class="acc-head">
     <div class="acc-title">
+      <span class="acc-avatar" data-platform="<%= a.platform %>"><%= (a.platformName || '?').charAt(0) %></span>
       <span class="pill"><%= a.platformName %></span>
       <strong><%= a.name %></strong>
     </div>
     <div class="acc-status">
       <% if (a.status === 'active') { %>
         <span class="chip ok">活跃</span>
-        <% if (a.auto_renew) { %><span class="chip" style="background:rgba(16,185,129,.12);color:#047857;">自动续期</span><% } %>
+        <% if (a.auto_renew) { %><span class="chip renew">自动续期</span><% } %>
         <% if (a.auto_renew && a.token_expires_at) { %><span class="muted small">Token 到期 <%= a.token_expires_at.slice(5,16) %></span>
         <% } else if (a.daysLeft !== null) { %><span class="muted small">授权剩 <%= a.daysLeft %> 天</span><% } %>
       <% } else if (a.status === 'expired') { %>
@@ -99,7 +100,7 @@
         <% if (a.platform === 'trae') { %>
           <%- include('partials/trae-oauth') %>
         <% } else if (registry[a.platform] && typeof registry[a.platform].refreshToken === 'function') { %>
-          <div class="field" style="margin-top:8px;">
+          <div class="field">
             <label class="check-line">
               <input type="checkbox" name="auto_renew" value="1" <%= a.auto_renew ? 'checked' : '' %>> 启用自动续期（需已填入 Refresh Token）
             </label>
@@ -175,7 +176,7 @@
         var exp = d.token_expires_at ? new Date(d.token_expires_at) : null;
         var expTxt = exp ? '，Token 到期 ' + exp.toLocaleString() : '';
         result.innerHTML = '✅ 授权成功' + (d.name ? '（' + d.name + '）' : '') + expTxt + '，已自动勾选「自动续期」。';
-        result.style.color = '#047857';
+        result.style.color = 'var(--ok)';
       }
 
       // 无缝模式：轮询回调结果
@@ -192,7 +193,7 @@
               } else {
                 clearInterval(pollTimer); pollTimer = null;
                 result.textContent = '授权失败：' + (d.error || '未知错误');
-                result.style.color = '#dc2626';
+                result.style.color = 'var(--err)';
               }
             })
             .catch(function () { /* 网络抖动，继续轮询 */ });
@@ -226,14 +227,14 @@
           })
           .catch(function (e) {
             result.textContent = '生成失败：' + e.message;
-            result.style.color = '#dc2626';
+            result.style.color = 'var(--err)';
           })
           .finally(function () { genBtn.disabled = false; });
       });
 
       parseBtn.addEventListener('click', function () {
         var cb = cbInput.value.trim();
-        if (!cb) { result.textContent = '请先粘贴回调链接'; result.style.color = '#dc2626'; return; }
+        if (!cb) { result.textContent = '请先粘贴回调链接'; result.style.color = 'var(--err)'; return; }
         parseBtn.disabled = true;
         result.textContent = '正在解析…';
         result.style.color = '';
@@ -249,7 +250,7 @@
           })
           .catch(function (e) {
             result.textContent = '解析失败：' + e.message;
-            result.style.color = '#dc2626';
+            result.style.color = 'var(--err)';
           })
           .finally(function () { parseBtn.disabled = false; });
       });
@@ -284,7 +285,7 @@
           var expTxt = exp ? '，Token 到期 ' + exp.toLocaleString() : '';
           if (result) {
             result.innerHTML = '✅ 授权成功' + (d.name ? '（' + d.name + '）' : '') + expTxt + '，已自动勾选「自动续期」。';
-            result.style.color = '#047857';
+            result.style.color = 'var(--ok)';
           }
         })
         .catch(function () { if (result) result.textContent = '获取授权结果失败，请重试'; });
