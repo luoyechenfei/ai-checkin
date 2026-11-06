@@ -29,7 +29,7 @@ function render(req, res, view, locals = {}) {
     user: req.user,
     siteName: getSetting('site_name', 'AI 签到助手'),
     unread: req.user ? unreadCount(req.user.id) : 0,
-    themeMode: req.user ? (req.user.theme || 'auto') : 'auto',
+    themeMode: req.user ? (req.user.theme || 'light') : 'light',
     msg: req.query.msg || null,
     msgType: req.query.type === 'err' ? 'err' : 'ok'
   }, locals));
@@ -37,6 +37,39 @@ function render(req, res, view, locals = {}) {
 
 function platformName(id) {
   return REGISTRY[id] ? REGISTRY[id].name : id;
+}
+
+/* 与账号页平台头像色保持一致，用于积分构成饼图 */
+const PLATFORM_COLORS = {
+  trae: '#c2410c',
+  workbuddy: '#15803d',
+  codebuddy: '#b45309',
+  zcode: '#334155',
+  qoder: '#0e7490',
+  aipy: '#7c3aed',
+  custom: '#64748b'
+};
+
+/** 按平台聚合今日 / 累计签到积分（仅成功且积分 > 0 的记录参与绘图） */
+function pointsBreakdown(uid, today) {
+  const rows = db.prepare(
+    `SELECT platform,
+            COALESCE(SUM(points), 0) AS total,
+            COALESCE(SUM(CASE WHEN substr(created_at, 1, 10) = ? THEN points ELSE 0 END), 0) AS today
+     FROM logs WHERE user_id = ? AND success = 1
+     GROUP BY platform`).all(today, uid);
+
+  const build = (key) => rows
+    .filter(r => r[key] > 0)
+    .map(r => ({
+      id: r.platform,
+      name: platformName(r.platform),
+      color: PLATFORM_COLORS[r.platform] || PLATFORM_COLORS.custom,
+      points: Math.round(r[key] * 100) / 100
+    }))
+    .sort((a, b) => b.points - a.points);
+
+  return { today: build('today'), total: build('total') };
 }
 
 /** 给账号列表补充展示字段 */
@@ -169,6 +202,12 @@ router.get('/dashboard', requireAuth, (req, res) => {
   stats.todayPoints = pointRow.today;
   stats.totalPoints = pointRow.total;
 
+  const byPlatform = pointsBreakdown(uid, today);
+  const pointsData = {
+    today: { total: Math.round(stats.todayPoints * 100) / 100, items: byPlatform.today },
+    total: { total: Math.round(stats.totalPoints * 100) / 100, items: byPlatform.total }
+  };
+
   const recentLogs = db.prepare(
     `SELECT l.*, a.name AS account_name FROM logs l
      LEFT JOIN accounts a ON a.id = l.account_id
@@ -180,7 +219,7 @@ router.get('/dashboard', requireAuth, (req, res) => {
     .sort((a, b) => (a.checkin_time > b.checkin_time ? 1 : -1))
     .slice(0, 6);
 
-  render(req, res, 'dashboard', { title: '仪表盘', stats, accounts, recentLogs, upcoming });
+  render(req, res, 'dashboard', { title: '仪表盘', stats, accounts, recentLogs, upcoming, pointsData });
 });
 
 // ---------- 平台账号 ----------

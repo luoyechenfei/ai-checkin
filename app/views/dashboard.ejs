@@ -9,12 +9,12 @@
   <div class="stat card"><div class="stat-num"><%= stats.total %></div><div class="stat-label">平台账号</div></div>
   <div class="stat card"><div class="stat-num ok"><%= stats.active %></div><div class="stat-label">活跃授权</div></div>
   <div class="stat card"><div class="stat-num"><%= stats.todayDone %></div><div class="stat-label">今日已签</div></div>
-  <div class="stat card"><div class="stat-num ok"><%= stats.todayPoints %></div><div class="stat-label">今日积分</div></div>
-  <div class="stat card"><div class="stat-num"><%= stats.totalPoints %></div><div class="stat-label">累计积分</div></div>
+  <div class="stat card stat-points" tabindex="0" data-tip="today" aria-describedby="points-tip"><div class="stat-num ok"><%= stats.todayPoints %></div><div class="stat-label">今日积分</div></div>
+  <div class="stat card stat-points" tabindex="0" data-tip="total" aria-describedby="points-tip"><div class="stat-num"><%= stats.totalPoints %></div><div class="stat-label">累计积分</div></div>
   <div class="stat card"><div class="stat-num <%= stats.expired > 0 ? 'err' : '' %>"><%= stats.expired %></div><div class="stat-label">待重新授权</div></div>
 </div>
 
-<div class="grid-2">
+<div class="stack">
   <div class="card">
     <h2 class="card-title">今日签到安排</h2>
     <% if (upcoming.length === 0) { %>
@@ -38,18 +38,18 @@
   </div>
 
   <div class="card">
-    <h2 class="card-title">最近签到记录 <a class="link-more" href="/logs">全部 →</a></h2>
+    <h2 class="card-title">最近签到记录 <a class="link-more" href="/logs">查看全部 →</a></h2>
     <% if (recentLogs.length === 0) { %>
       <p class="empty">暂无签到记录</p>
     <% } else { %>
       <table class="table compact">
-        <thead><tr><th>时间</th><th>平台</th><th>结果</th></tr></thead>
+        <thead><tr><th class="ta-r">时间</th><th>平台</th><th class="ta-r">结果</th></tr></thead>
         <tbody>
           <% recentLogs.forEach(l => { %>
           <tr>
-            <td class="muted nowrap"><%= l.created_at %></td>
+            <td class="muted nowrap ta-r"><%= l.created_at %></td>
             <td><span class="pill"><%= l.platformName %></span></td>
-            <td><span class="chip <%= l.success ? 'ok' : 'err' %>"><%= l.success ? '成功' : '失败' %></span>
+            <td class="ta-r"><span class="chip <%= l.success ? 'ok' : 'err' %>"><%= l.success ? '成功' : '失败' %></span>
               <% if (l.points > 0) { %><span class="chip ok">+<%= l.points %></span><% } %>
               <span class="muted small"><%= (l.message || '').slice(0, 40) %></span></td>
           </tr>
@@ -59,5 +59,200 @@
     <% } %>
   </div>
 </div>
+
+<div class="points-tip" id="points-tip" role="tooltip" aria-hidden="true">
+  <div class="points-tip-head">
+    <span class="points-tip-title" data-tip-title></span>
+    <span class="points-tip-total"><span data-tip-total></span><span class="unit">分</span></span>
+  </div>
+  <div data-tip-body></div>
+</div>
+
+<script type="application/json" id="points-data"><%- JSON.stringify(pointsData).replace(/</g, '\\u003c') %></script>
+<script>
+  (function () {
+    var dataEl = document.getElementById('points-data');
+    var tip = document.getElementById('points-tip');
+    if (!dataEl || !tip) return;
+
+    var data;
+    try { data = JSON.parse(dataEl.textContent); } catch (e) { return; }
+
+    var cards = Array.prototype.slice.call(document.querySelectorAll('.stat-points'));
+    if (cards.length === 0) return;
+
+    // 固定定位不受容器动画 transform 影响，移到 body 下
+    document.body.appendChild(tip);
+
+    var activeCard = null;
+    var lastPointer = 'mouse';
+    var recentTouch = false;
+
+    function esc(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function num(n) {
+      return String(Math.round(Number(n) * 100) / 100);
+    }
+    function pct(n) {
+      var v = Math.round(Number(n) * 1000) / 10;
+      return (v >= 100 ? '100' : String(v)) + '%';
+    }
+
+    function arc(cx, cy, ro, ri, a0, a1) {
+      var x0 = (cx + ro * Math.cos(a0)).toFixed(2), y0 = (cy + ro * Math.sin(a0)).toFixed(2);
+      var x1 = (cx + ro * Math.cos(a1)).toFixed(2), y1 = (cy + ro * Math.sin(a1)).toFixed(2);
+      var ix0 = (cx + ri * Math.cos(a0)).toFixed(2), iy0 = (cy + ri * Math.sin(a0)).toFixed(2);
+      var ix1 = (cx + ri * Math.cos(a1)).toFixed(2), iy1 = (cy + ri * Math.sin(a1)).toFixed(2);
+      var large = (a1 - a0) > Math.PI ? 1 : 0;
+      return 'M ' + x0 + ' ' + y0 +
+        ' A ' + ro + ' ' + ro + ' 0 ' + large + ' 1 ' + x1 + ' ' + y1 +
+        ' L ' + ix1 + ' ' + iy1 +
+        ' A ' + ri + ' ' + ri + ' 0 ' + large + ' 0 ' + ix0 + ' ' + iy0 + ' Z';
+    }
+
+    function donut(items, total) {
+      var parts = [];
+      if (items.length === 1) {
+        parts.push('<circle cx="63" cy="63" r="37.5" fill="none" stroke="' + items[0].color +
+          '" stroke-width="19" data-angle="360"></circle>');
+      } else {
+        var start = -Math.PI / 2;
+        items.forEach(function (it) {
+          var sweep = it.points / total * Math.PI * 2;
+          var end = start + sweep;
+          parts.push('<path data-angle="' + (sweep * 180 / Math.PI).toFixed(3) +
+            '" fill="' + it.color + '" d="' + arc(63, 63, 47, 28, start, end) + '"></path>');
+          start = end;
+        });
+      }
+      return '<svg class="points-donut" viewBox="0 0 126 126" role="img" aria-label="按平台积分占比">' +
+        parts.join('') +
+        '<text x="63" y="66" text-anchor="middle">' + num(total) + '</text>' +
+        '<text class="pd-unit" x="63" y="79" text-anchor="middle">分</text></svg>';
+    }
+
+    function legend(items, total) {
+      return '<ul class="points-legend">' + items.map(function (it) {
+        return '<li>' +
+          '<span class="pd-dot" style="background:' + it.color + '"></span>' +
+          '<span class="pd-name">' + esc(it.name) + '</span>' +
+          '<span class="pd-num">' + num(it.points) + '</span>' +
+          '<span class="pd-pct">' + pct(it.points / total) + '</span>' +
+          '</li>';
+      }).join('') + '</ul>';
+    }
+
+    function render(kind) {
+      var d = data[kind] || { total: 0, items: [] };
+      var items = (d.items || []).filter(function (it) { return it.points > 0; });
+      var total = Number(d.total) || 0;
+
+      tip.querySelector('[data-tip-title]').textContent =
+        kind === 'total' ? '累计积分 · 按平台构成' : '今日积分 · 按平台构成';
+      tip.querySelector('[data-tip-total]').textContent = num(total);
+
+      var body = tip.querySelector('[data-tip-body]');
+      if (items.length === 0 || total <= 0) {
+        body.innerHTML = '<p class="points-empty">' +
+          (kind === 'total' ? '暂无累计积分记录' : '今日暂无积分记录') + '</p>';
+        return;
+      }
+      body.innerHTML = '<div class="points-chart">' + donut(items, total) + legend(items, total) + '</div>' +
+        '<p class="points-note">仅统计签到成功且积分大于 0 的记录</p>';
+    }
+
+    function place(card) {
+      var margin = 12;
+      var vw = window.innerWidth;
+      var vh = window.innerHeight;
+      var r = card.getBoundingClientRect();
+      var tw = tip.offsetWidth;
+      var th = tip.offsetHeight;
+
+      var left = r.left + r.width / 2 - tw / 2;
+      left = Math.max(margin, Math.min(left, vw - tw - margin));
+
+      var top = r.bottom + 10;
+      if (top + th > vh - margin) top = r.top - th - 10;
+      top = Math.max(margin, Math.min(top, vh - th - margin));
+
+      tip.style.left = left.toFixed(1) + 'px';
+      tip.style.top = top.toFixed(1) + 'px';
+    }
+
+    function open(card, kind) {
+      if (!data[kind]) return;
+      activeCard = card;
+      render(kind);
+      tip.classList.remove('is-open');
+      place(card);
+      tip.setAttribute('aria-hidden', 'false');
+      window.requestAnimationFrame(function () {
+        if (activeCard === card) tip.classList.add('is-open');
+      });
+    }
+
+    function close() {
+      tip.classList.remove('is-open');
+      tip.setAttribute('aria-hidden', 'true');
+      activeCard = null;
+    }
+
+    cards.forEach(function (card) {
+      var kind = card.getAttribute('data-tip');
+
+      card.addEventListener('pointerdown', function (e) {
+        lastPointer = e.pointerType || 'mouse';
+        recentTouch = lastPointer !== 'mouse';
+      });
+
+      card.addEventListener('pointerenter', function (e) {
+        if ((e.pointerType || 'mouse') !== 'mouse') return;
+        open(card, kind);
+      });
+
+      card.addEventListener('pointerleave', function (e) {
+        if ((e.pointerType || 'mouse') !== 'mouse') return;
+        close();
+      });
+
+      card.addEventListener('focus', function () {
+        if (recentTouch) { recentTouch = false; return; }
+        open(card, kind);
+      });
+
+      card.addEventListener('blur', close);
+
+      card.addEventListener('click', function () {
+        recentTouch = false;
+        if (lastPointer === 'mouse') return;
+        if (activeCard === card && tip.classList.contains('is-open')) close();
+        else open(card, kind);
+      });
+
+      card.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { close(); return; }
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          if (activeCard === card && tip.classList.contains('is-open')) close();
+          else open(card, kind);
+        }
+      });
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && activeCard) close();
+    });
+    document.addEventListener('click', function (e) {
+      if (!activeCard) return;
+      if (e.target.closest('.stat-points') || e.target.closest('#points-tip')) return;
+      close();
+    });
+    window.addEventListener('scroll', close, { passive: true });
+    window.addEventListener('resize', close);
+  })();
+</script>
 
 <%- include('partials/footer') %>
