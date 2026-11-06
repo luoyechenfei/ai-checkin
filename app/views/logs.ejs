@@ -31,18 +31,18 @@
     </div>
     <div class="table-wrap">
     <table class="table">
-      <thead><tr><th class="check-col"></th><th>时间</th><th>平台</th><th>账号</th><th>结果</th><th>积分</th><th>消息</th><th>操作</th></tr></thead>
+      <thead><tr><th class="check-col"></th><th class="ta-r">时间</th><th>平台</th><th>账号</th><th>结果</th><th class="ta-r">积分</th><th>消息</th><th class="col-actions">操作</th></tr></thead>
       <tbody>
         <% logs.forEach(l => { %>
         <tr>
           <td class="check-col"><input type="checkbox" name="ids" value="<%= l.id %>" class="row-check" aria-label="选择记录"></td>
-          <td class="muted nowrap"><%= l.created_at %></td>
+          <td class="muted nowrap ta-r"><%= l.created_at %></td>
           <td><span class="pill"><%= l.platformName %></span></td>
           <td><%= l.account_name || '-' %></td>
           <td><span class="chip <%= l.success ? 'ok' : 'err' %>"><%= l.success ? '成功' : '失败' %></span></td>
-          <td class="nowrap"><%= l.points > 0 ? '+' + l.points : (l.success ? '0' : '-') %></td>
+          <td class="nowrap ta-r"><%= l.points > 0 ? '+' + l.points : (l.success ? '0' : '-') %></td>
           <td class="msg-cell"><%= l.message || '' %></td>
-          <td>
+          <td class="col-actions">
             <button type="submit" class="btn danger sm" formaction="/logs/<%= l.id %>/delete"
                     onclick="return confirm('确定删除这条记录吗？')">删除</button>
           </td>

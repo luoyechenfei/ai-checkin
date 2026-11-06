@@ -1,6 +1,9 @@
 <%- include('partials/header') %>
 
-<div class="page-head"><h1>管理后台</h1></div>
+<div class="page-head">
+  <h1>管理后台</h1>
+  <span class="muted">站点配置、用户与平台账号总览</span>
+</div>
 
 <div class="admin-nav">
   <a class="btn ghost sm active" href="/admin">全局设置与用户</a>
@@ -8,8 +11,15 @@
   <a class="btn ghost sm" href="/admin/notifications">系统通知</a>
 </div>
 
-<div class="grid-2">
-  <div class="card">
+<div class="tabbar" data-tabbar="/admin" role="tablist" aria-label="管理分区">
+  <button type="button" class="tab is-active" role="tab" id="admin-tab-settings" aria-controls="admin-pane-settings" aria-selected="true" data-tab="settings">全局设置</button>
+  <button type="button" class="tab" role="tab" id="admin-tab-users" aria-controls="admin-pane-users" aria-selected="false" tabindex="-1" data-tab="users">用户管理 <span class="tab-count"><%= users.length %></span></button>
+  <button type="button" class="tab" role="tab" id="admin-tab-accounts" aria-controls="admin-pane-accounts" aria-selected="false" tabindex="-1" data-tab="accounts">平台账号 <span class="tab-count"><%= accounts.length %></span></button>
+  <span class="tab-indicator" aria-hidden="true"></span>
+</div>
+
+<section id="admin-pane-settings" role="tabpanel" aria-labelledby="admin-tab-settings">
+  <div class="card narrow">
     <h2 class="card-title">全局设置</h2>
     <form method="post" action="/admin/settings" class="form">
       <div class="field">
@@ -48,20 +58,22 @@
       <button class="btn primary" type="submit">保存设置</button>
     </form>
   </div>
+</section>
 
+<section id="admin-pane-users" role="tabpanel" aria-labelledby="admin-tab-users" hidden>
   <div class="card">
     <h2 class="card-title">用户管理（<%= users.length %>）</h2>
     <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>用户名</th><th>角色</th><th>账号数</th><th>状态</th><th>操作</th></tr></thead>
+      <thead><tr><th>用户名</th><th>角色</th><th class="ta-r">账号数</th><th>状态</th><th class="col-actions">操作</th></tr></thead>
       <tbody>
         <% users.forEach(u => { %>
         <tr>
           <td><%= u.username %></td>
           <td><%= u.is_admin ? '管理员' : '用户' %></td>
-          <td><%= u.account_count %></td>
+          <td class="ta-r"><%= u.account_count %></td>
           <td><span class="chip <%= u.status === 'active' ? 'ok' : 'warn' %>"><%= u.status === 'active' ? '正常' : '已禁用' %></span></td>
-          <td>
+          <td class="col-actions">
             <div class="op-group">
               <% if (u.status === 'active') { %>
               <form class="inline-form" method="post" action="/admin/users/<%= u.id %>/op">
@@ -98,16 +110,17 @@
     </table>
     </div>
   </div>
-</div>
+</section>
 
-<div class="card">
-  <h2 class="card-title">全部平台账号（最近 100 条）</h2>
+<section id="admin-pane-accounts" role="tabpanel" aria-labelledby="admin-tab-accounts" hidden>
+  <div class="card">
+    <h2 class="card-title">全部平台账号（最近 100 条）</h2>
   <% if (accounts.length === 0) { %>
     <p class="empty">暂无数据</p>
   <% } else { %>
   <div class="table-wrap">
   <table class="table">
-    <thead><tr><th>归属用户</th><th>平台</th><th>备注</th><th>状态</th><th>每日时间</th><th>到期时间</th></tr></thead>
+    <thead><tr><th>归属用户</th><th>平台</th><th>备注</th><th>状态</th><th class="ta-r">每日时间</th><th class="ta-r">到期时间</th></tr></thead>
     <tbody>
       <% accounts.forEach(a => { %>
       <tr>
@@ -115,14 +128,15 @@
         <td><span class="pill"><%= a.platformName %></span></td>
         <td><%= a.name %></td>
         <td><span class="chip <%= a.status === 'active' ? 'ok' : (a.expired ? 'err' : 'warn') %>"><%= a.status === 'active' ? '活跃' : (a.status === 'expired' ? '已过期' : '已暂停') %></span></td>
-        <td><%= a.checkin_time %></td>
-        <td class="muted"><%= a.expires_at || '-' %></td>
+        <td class="ta-r"><%= a.checkin_time %></td>
+        <td class="muted ta-r"><%= a.expires_at || '-' %></td>
       </tr>
       <% }) %>
     </tbody>
   </table>
   </div>
   <% } %>
-</div>
+  </div>
+</section>
 
 <%- include('partials/footer') %>

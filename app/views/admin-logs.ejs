@@ -51,17 +51,17 @@
     </div>
     <div class="table-wrap">
     <table class="table">
-      <thead><tr><th class="check-col"></th><th>时间</th><th>用户</th><th>操作</th><th>详情</th><th>IP</th><th>操作</th></tr></thead>
+      <thead><tr><th class="check-col"></th><th class="ta-r">时间</th><th>用户</th><th>操作</th><th>详情</th><th>IP</th><th class="col-actions">操作</th></tr></thead>
       <tbody>
         <% rows.forEach(r => { %>
         <tr>
           <td class="check-col"><input type="checkbox" name="ids" value="<%= r.id %>" class="row-check" aria-label="选择日志"></td>
-          <td class="muted nowrap"><%= r.created_at %></td>
+          <td class="muted nowrap ta-r"><%= r.created_at %></td>
           <td><%= r.username || '-' %></td>
           <td><span class="pill"><%= ACTION_NAMES[r.action] || r.action %></span></td>
           <td class="msg-cell"><%= r.detail || '' %></td>
           <td class="muted nowrap"><%= r.ip || '-' %></td>
-          <td>
+          <td class="col-actions">
             <button type="submit" class="btn danger sm" formaction="/admin/logs/<%= r.id %>/delete"
                     onclick="return confirm('确定删除这条日志吗？')">删除</button>
           </td>

@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   is_admin      INTEGER NOT NULL DEFAULT 0,
   status        TEXT NOT NULL DEFAULT 'active', -- active | disabled
-  theme         TEXT NOT NULL DEFAULT 'auto',   -- auto | light | dark
+  theme         TEXT NOT NULL DEFAULT 'light',  -- light | dark | auto
   created_at    TEXT NOT NULL
 );
 
@@ -110,7 +110,7 @@ function ensureColumn(table, column, definition) {
 // 签到获得的积分（REAL 兼容小数积分；拿不到积分的平台记 0）
 ensureColumn('logs', 'points', 'REAL NOT NULL DEFAULT 0');
 // 用户主题偏好：auto（跟随系统）/ light / dark
-ensureColumn('users', 'theme', "TEXT NOT NULL DEFAULT 'auto'");
+ensureColumn('users', 'theme', "TEXT NOT NULL DEFAULT 'light'");
 // 通知关联的全局公告 ID
 ensureColumn('notifications', 'broadcast_id', 'INTEGER');
 // 通知级别（系统广播使用 info/warn/err 区分普通、重要、紧急）
