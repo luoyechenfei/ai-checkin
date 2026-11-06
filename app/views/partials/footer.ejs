@@ -1,17 +1,25 @@
 </main>
-<footer class="footer">© 2026 <a href="https://github.com/luoyechenfei/ai-checkin" target="_blank" rel="noopener">ai-checkin</a></footer>
+<footer class="footer">© <%= new Date().getFullYear() %> <a href="https://github.com/luoyechenfei/ai-checkin" target="_blank" rel="noopener">ai-checkin</a> <span class="footer-sep" aria-hidden="true">·</span> <span class="footer-ver">v<%= assetVersion %></span></footer>
 <script>
   (function () {
     var theme = window.__aicTheme;
     if (theme) {
-      var sel = document.getElementById('themeSelect');
-      if (sel) {
-        sel.value = theme.mode;
-        sel.addEventListener('change', function () {
-          var mode = sel.value;
+      var groups = document.querySelectorAll('.theme-seg');
+      Array.prototype.forEach.call(groups, function (group) {
+        var btns = Array.prototype.slice.call(group.querySelectorAll('[data-mode]'));
+        function paint(mode) {
+          btns.forEach(function (btn) {
+            var on = btn.getAttribute('data-mode') === mode;
+            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+            btn.tabIndex = on ? 0 : -1;
+          });
+        }
+        function apply(mode, persist) {
           theme.mode = mode;
           document.documentElement.setAttribute('data-theme-mode', mode);
           document.documentElement.setAttribute('data-theme', theme.effective(mode));
+          paint(mode);
+          if (!persist) return;
           if (theme.isUser) {
             fetch('/prefs/theme', {
               method: 'POST',
@@ -21,8 +29,26 @@
           } else {
             try { localStorage.setItem('aic-theme', mode); } catch (e) {}
           }
+        }
+        paint(theme.mode);
+        btns.forEach(function (btn, i) {
+          btn.addEventListener('click', function () {
+            apply(btn.getAttribute('data-mode'), true);
+          });
+          btn.addEventListener('keydown', function (e) {
+            var next = null;
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % btns.length;
+            else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (i - 1 + btns.length) % btns.length;
+            else if (e.key === 'Home') next = 0;
+            else if (e.key === 'End') next = btns.length - 1;
+            if (next !== null) {
+              e.preventDefault();
+              apply(btns[next].getAttribute('data-mode'), true);
+              btns[next].focus();
+            }
+          });
         });
-      }
+      });
       if (window.matchMedia) {
         var mq = matchMedia('(prefers-color-scheme: dark)');
         var onChange = function () {
@@ -33,6 +59,16 @@
         if (mq.addEventListener) mq.addEventListener('change', onChange);
         else if (mq.addListener) mq.addListener(onChange);
       }
+    }
+
+    // 顶栏滚动状态：滚动后加深背景与阴影（毛玻璃随之变化）
+    var bar = document.querySelector('.topbar, .guest-bar');
+    if (bar) {
+      var onScroll = function () {
+        bar.classList.toggle('is-scrolled', window.scrollY > 8);
+      };
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
     }
 
     // 验证码点击刷新
@@ -51,6 +87,65 @@
           }).catch(function () {});
       });
     }
+    // 页内 tab 切换（账号设置 / 管理后台）：默认首个 tab；
+    // 提交后带 flash 返回时恢复上次所在的 tab，保证提示与内容同时落位。
+    var tabbars = document.querySelectorAll('[data-tabbar]');
+    Array.prototype.forEach.call(tabbars, function (bar) {
+      var tabs = Array.prototype.slice.call(bar.querySelectorAll('[role="tab"]'));
+      var panes = tabs.map(function (tab) {
+        return document.getElementById(tab.getAttribute('aria-controls'));
+      });
+      var indicator = bar.querySelector('.tab-indicator');
+      var key = 'aic-tab:' + (bar.getAttribute('data-tabbar') || location.pathname);
+      var hasFlash = !!document.querySelector('.flash');
+      var current = 0;
+      var stored = null;
+      try { stored = sessionStorage.getItem(key); } catch (e) {}
+      if (hasFlash && stored) {
+        tabs.forEach(function (tab, i) {
+          if (tab.getAttribute('data-tab') === stored) current = i;
+        });
+      }
+      function placeIndicator() {
+        if (!indicator || !tabs[current]) return;
+        indicator.style.left = tabs[current].offsetLeft + 'px';
+        indicator.style.width = tabs[current].offsetWidth + 'px';
+      }
+      function activate(index, focus) {
+        current = index;
+        tabs.forEach(function (tab, i) {
+          var on = i === index;
+          tab.classList.toggle('is-active', on);
+          tab.setAttribute('aria-selected', on ? 'true' : 'false');
+          tab.tabIndex = on ? 0 : -1;
+          if (panes[i]) panes[i].hidden = !on;
+        });
+        placeIndicator();
+        try { sessionStorage.setItem(key, tabs[index].getAttribute('data-tab')); } catch (e) {}
+        if (focus) tabs[index].focus();
+      }
+      tabs.forEach(function (tab, i) {
+        tab.addEventListener('click', function () { activate(i, false); });
+        tab.addEventListener('keydown', function (e) {
+          var next = null;
+          if (e.key === 'ArrowRight') next = (i + 1) % tabs.length;
+          else if (e.key === 'ArrowLeft') next = (i - 1 + tabs.length) % tabs.length;
+          else if (e.key === 'Home') next = 0;
+          else if (e.key === 'End') next = tabs.length - 1;
+          if (next !== null) { e.preventDefault(); activate(next, true); }
+        });
+        if (panes[i]) {
+          panes[i].addEventListener('submit', function () {
+            try { sessionStorage.setItem(key, tab.getAttribute('data-tab')); } catch (e) {}
+          });
+        }
+      });
+      activate(current, false);
+      window.addEventListener('resize', placeIndicator);
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(placeIndicator).catch(function () {});
+      }
+    });
   })();
 </script>
 </body>
