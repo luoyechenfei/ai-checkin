@@ -50,7 +50,7 @@
               onclick="return confirm('确定删除选中的操作日志吗？')">批量删除</button>
     </div>
     <div class="table-wrap">
-    <table class="table fixed audit-table">
+    <table class="table fixed audit-table stack-table">
       <colgroup>
         <col class="col-check">
         <col class="col-time">
@@ -64,13 +64,13 @@
       <tbody>
         <% rows.forEach(r => { %>
         <tr>
-          <td class="check-col"><input type="checkbox" name="ids" value="<%= r.id %>" class="row-check" aria-label="选择日志"></td>
-          <td class="muted nowrap ta-l"><%= r.created_at %></td>
-          <td class="ta-c"><%= r.username || '-' %></td>
-          <td class="ta-c"><span class="pill"><%= ACTION_NAMES[r.action] || r.action %></span></td>
-          <td class="msg-cell ta-l"><%= r.detail || '' %></td>
-          <td class="muted nowrap ta-c"><%= r.ip || '-' %></td>
-          <td class="col-actions">
+          <td class="check-col" data-label="选择"><label class="chk"><input type="checkbox" name="ids" value="<%= r.id %>" class="row-check" aria-label="选择日志"></label></td>
+          <td class="muted nowrap ta-l" data-label="时间"><%= r.created_at %></td>
+          <td class="ta-c" data-label="用户"><%= r.username || '-' %></td>
+          <td class="ta-c" data-label="动作"><span class="pill"><%= ACTION_NAMES[r.action] || r.action %></span></td>
+          <td class="msg-cell ta-l" data-label="详情"><%= r.detail || '' %></td>
+          <td class="muted nowrap ta-c" data-label="IP"><%= r.ip || '-' %></td>
+          <td class="col-actions" data-label="操作">
             <button type="submit" class="btn danger sm" formaction="/admin/logs/<%= r.id %>/delete"
                     onclick="return confirm('确定删除这条日志吗？')">删除</button>
           </td>

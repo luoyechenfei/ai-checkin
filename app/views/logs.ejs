@@ -30,7 +30,7 @@
               onclick="return confirm('确定删除选中的签到记录吗？删除后不可恢复。')">批量删除</button>
     </div>
     <div class="table-wrap">
-    <table class="table fixed logs-table">
+    <table class="table fixed logs-table stack-table">
       <colgroup>
         <col class="col-check">
         <col class="col-time">
@@ -45,14 +45,14 @@
       <tbody>
         <% logs.forEach(l => { %>
         <tr>
-          <td class="check-col"><input type="checkbox" name="ids" value="<%= l.id %>" class="row-check" aria-label="选择记录"></td>
-          <td class="muted nowrap ta-l"><%= l.created_at %></td>
-          <td class="ta-c"><span class="pill"><%= l.platformName %></span></td>
-          <td class="ta-c"><%= l.account_name || '-' %></td>
-          <td class="cell-result ta-c"><span class="chip <%= l.success ? 'ok' : 'err' %>"><%= l.success ? '成功' : '失败' %></span></td>
-          <td class="nowrap ta-c"><%= l.points > 0 ? '+' + l.points : (l.success ? '0' : '-') %></td>
-          <td class="msg-cell ta-l"><%= l.message || '' %></td>
-          <td class="col-actions">
+          <td class="check-col" data-label="选择"><label class="chk"><input type="checkbox" name="ids" value="<%= l.id %>" class="row-check" aria-label="选择记录"></label></td>
+          <td class="muted nowrap ta-l" data-label="时间"><%= l.created_at %></td>
+          <td class="ta-c" data-label="平台"><span class="pill"><%= l.platformName %></span></td>
+          <td class="ta-c" data-label="账号"><%= l.account_name || '-' %></td>
+          <td class="cell-result ta-c" data-label="结果"><span class="chip <%= l.success ? 'ok' : 'err' %>"><%= l.success ? '成功' : '失败' %></span></td>
+          <td class="nowrap ta-c" data-label="积分"><%= l.points > 0 ? '+' + l.points : (l.success ? '0' : '-') %></td>
+          <td class="msg-cell ta-l" data-label="消息"><%= l.message || '' %></td>
+          <td class="col-actions" data-label="操作">
             <button type="submit" class="btn danger sm" formaction="/logs/<%= l.id %>/delete"
                     onclick="return confirm('确定删除这条记录吗？')">删除</button>
           </td>

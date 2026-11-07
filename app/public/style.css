@@ -208,6 +208,7 @@ code {
   display: inline-flex;
   align-items: center;
   gap: 11px;
+  min-height: 32px;
   color: var(--bar-ink);
   text-decoration: none;
   flex: 0 0 auto;
@@ -262,10 +263,13 @@ code {
 .nav a {
   position: relative;
   display: inline-block;
+  min-width: 32px;
+  flex: 0 0 auto;
   padding: 6px 0;
   color: var(--bar-muted);
   font-size: 14px;
   letter-spacing: .08em;
+  text-align: center;
   text-decoration: none;
   white-space: nowrap;
   transition: color .18s ease, transform .18s ease;
@@ -338,8 +342,8 @@ code {
   border-radius: 7px;
 }
 .theme-seg-btn {
-  width: 27px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   display: inline-grid;
   place-items: center;
   padding: 0;
@@ -433,16 +437,35 @@ code {
   padding: 22px;
   box-shadow: 0 1px 0 var(--rule);
 }
+/* 卡片四角角标：单个 ::before 用 8 条渐变绘制四个 L（每角横 16×3 + 竖 3×16），
+   四角对称、与卡片外边缘固定 1px 偏移；颜色沿用 --accent 并随深浅主题切换。
+   ::before 铺满整张卡片（inset:-1px）、不参与布局，卡片无 overflow:hidden，
+   高度变化（如 <details> 展开）时只拉伸绘制区，角标仍钉在四角。 */
 .card::before {
   content: "";
   position: absolute;
-  top: -1px;
-  left: -1px;
-  width: 16px;
-  height: 16px;
-  border-top: 3px solid var(--accent);
-  border-left: 3px solid var(--accent);
+  inset: -1px;
   pointer-events: none;
+  background-image:
+    linear-gradient(var(--accent), var(--accent)),
+    linear-gradient(var(--accent), var(--accent)),
+    linear-gradient(var(--accent), var(--accent)),
+    linear-gradient(var(--accent), var(--accent)),
+    linear-gradient(var(--accent), var(--accent)),
+    linear-gradient(var(--accent), var(--accent)),
+    linear-gradient(var(--accent), var(--accent)),
+    linear-gradient(var(--accent), var(--accent));
+  background-repeat: no-repeat;
+  background-size:
+    16px 3px, 3px 16px,
+    16px 3px, 3px 16px,
+    16px 3px, 3px 16px,
+    16px 3px, 3px 16px;
+  background-position:
+    left top, left top,
+    right top, right top,
+    left bottom, left bottom,
+    right bottom, right bottom;
 }
 .card-title {
   display: flex;
@@ -465,6 +488,9 @@ code {
 }
 .card-title .link-more {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
   font-family: var(--sans);
   font-size: 12.5px;
   letter-spacing: .04em;
@@ -507,7 +533,7 @@ code {
 
 /* ---------- 仪表盘扁平化 ----------
    判定标准：① 容器无位移硬投影（仪表盘内一律 box-shadow:none）；
-   ② 边框统一 ≤1px，不用 2px+ 墨条/3px 顶边；③ 去掉角标印章与标题装饰块；
+   ② 边框统一 ≤1px，不用 2px+ 墨条/3px 顶边；③ 保留卡片四角角标（全站统一），去掉标题装饰块；
    ④ 层级由底色分区（纸面 → 卡面）、1px 分隔线与字号/字重承担。 */
 .dashboard,
 :root[data-theme="dark"] .dashboard { background-image: none; }
@@ -541,7 +567,6 @@ code {
   padding: 22px;
   box-shadow: none;
 }
-.dashboard .card:not(.stat)::before { display: none; }
 .dashboard .card-title {
   padding-bottom: 12px;
   border-bottom: 1px solid var(--rule);
@@ -831,6 +856,26 @@ code {
 .table tbody tr:hover td { background: var(--accent-soft); }
 .table tbody tr:last-child td { border-bottom: 0; }
 .table input[type="checkbox"] { accent-color: var(--accent); }
+/* 表格行勾选框：视觉尺寸保持 15px，外层 label 提供 ≥32×32 命中区；
+   负边距只抵消外层占位，不缩小可点击区域，行高与列对齐均不变。 */
+.chk {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: -9px 0 -9px -9px;
+  cursor: pointer;
+}
+.chk input[type="checkbox"] { margin: 0; }
+/* 非表单行内的「全选」标签（如系统通知页）：同样给 32px 高命中区 */
+.chk-inline {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  gap: 8px;
+}
+.chk-inline input[type="checkbox"] { margin: 0; }
 .msg-cell { word-break: break-word; overflow-wrap: anywhere; }
 
 /* ---------- 表格列宽（按比例铺满容器，全站统一规范） ----------
@@ -980,7 +1025,7 @@ code {
 }
 .btn.danger { color: var(--crimson); border-color: var(--crimson); background: transparent; }
 .btn.danger:hover { background: var(--crimson); border-color: var(--crimson); color: #fff; }
-.btn.sm { padding: 5px 11px; font-size: 13px; }
+.btn.sm { min-height: 32px; padding: 5px 11px; font-size: 13px; }
 .btn.block { width: 100%; padding: 12px 16px; }
 
 .inline-form { display: inline-flex; margin: 0; }
@@ -1061,7 +1106,8 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; cursor: not-al
 
 .check-line {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  min-height: 32px;
   gap: 9px;
   font-size: 14px;
   line-height: 1.55;
@@ -1072,7 +1118,7 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; cursor: not-al
 .check-line input[type="checkbox"] {
   width: 15px;
   height: 15px;
-  margin: 2px 0 0;
+  margin: 0;
   flex: 0 0 auto;
   accent-color: var(--accent);
 }
@@ -1086,12 +1132,14 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; cursor: not-al
 }
 .cred-help {
   margin: 0;
+  min-width: 0;
   padding: 10px 12px;
   background: var(--sheet-2);
   border-left: 3px solid var(--accent);
   font-size: 13.5px;
   line-height: 1.6;
   color: var(--ink-2);
+  overflow-wrap: anywhere;
 }
 
 /* 验证码 */
@@ -1543,6 +1591,31 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; cursor: not-al
   .auth-mast { min-height: 520px; }
 }
 
+/* 平板宽度提前切换到「品牌/工具 + 导航独立一行」的顶栏：
+   实测 721–933px 区间导航在单行空间不足时会内部折成两行并顶出顶栏，
+   因此在 ≤940px 就切到两行式顶栏（导航可横向滚动），≥941px 恢复单行。 */
+@media (max-width: 940px) {
+  .topbar-inner {
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    padding: 12px 24px 10px;
+  }
+  .nav {
+    order: 2;
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: 18px;
+    margin-left: 0;
+    overflow-x: auto;
+    padding: 2px 0 7px;
+    scrollbar-width: none;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a { display: inline-flex; align-items: center; min-height: 32px; padding: 4px 0; }
+  .nav a.active::after { bottom: 0; }
+  .nav-tools { order: 1; gap: 10px; margin-left: auto; }
+}
+
 @media (max-width: 900px) {
   .grid-2, .dashboard .grid-2 { grid-template-columns: 1fr; }
   .auth-wrap { grid-template-columns: 1fr 360px; }
@@ -1591,7 +1664,7 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; cursor: not-al
   .card.narrow { max-width: none; }
   .tabbar { gap: 22px; margin-bottom: 20px; }
   .btn.sm { min-height: 34px; padding: 6px 12px; }
-  .theme-seg-btn { width: 34px; height: 30px; }
+  .theme-seg-btn { width: 34px; height: 34px; }
   .theme-seg-btn svg { width: 16px; height: 16px; }
   .field-row { grid-template-columns: 1fr; }
   .cred-fields, .subform { min-width: 0; }
@@ -1629,6 +1702,105 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; cursor: not-al
   .narrow-page .footer { max-width: calc(100% - 32px); padding: 18px 0 36px; }
 }
 
+/* ---------- 窄屏表格卡片化（≤720px） ----------
+   六张数据表（仪表盘最近签到 / 签到记录 / 操作日志 / 系统通知 / 用户管理 / 平台账号）
+   在手机宽度下改为「每行一张卡」的字段堆叠：每个单元格左侧显示 data-label 字段名，
+   右侧显示值；操作与勾选列整行铺满。桌面与平板（≥721px）仍使用
+   table-layout: fixed + 百分比列宽，表头与数据列对齐规则完全不变。
+   行卡片沿用 .card 的四角角标绘制方式，堆叠态下四角仍然完整。 */
+@media (max-width: 720px) {
+  .table.fixed.stack-table {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    table-layout: auto;
+    border-collapse: separate;
+  }
+  .table.stack-table colgroup,
+  .table.stack-table thead { display: none; }
+  .table.stack-table col { width: auto; }
+  .table.stack-table tbody { display: block; }
+  .table.stack-table tbody tr {
+    display: block;
+    position: relative;
+    margin: 0 0 12px;
+    padding: 3px 0;
+    background: var(--sheet);
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--r);
+  }
+  .table.stack-table tbody tr:last-child { margin-bottom: 0; }
+  .table.stack-table tbody tr::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    pointer-events: none;
+    background-image:
+      linear-gradient(var(--accent), var(--accent)),
+      linear-gradient(var(--accent), var(--accent)),
+      linear-gradient(var(--accent), var(--accent)),
+      linear-gradient(var(--accent), var(--accent)),
+      linear-gradient(var(--accent), var(--accent)),
+      linear-gradient(var(--accent), var(--accent)),
+      linear-gradient(var(--accent), var(--accent)),
+      linear-gradient(var(--accent), var(--accent));
+    background-repeat: no-repeat;
+    background-size:
+      16px 3px, 3px 16px,
+      16px 3px, 3px 16px,
+      16px 3px, 3px 16px,
+      16px 3px, 3px 16px;
+    background-position:
+      left top, left top,
+      right top, right top,
+      left bottom, left bottom,
+      right bottom, right bottom;
+  }
+  .table.stack-table td {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 88px minmax(0, 1fr);
+    align-items: start;
+    gap: 12px;
+    padding: 7px 14px;
+    border-bottom: 0;
+    text-align: left;
+    white-space: normal;
+  }
+  .table.stack-table td::before {
+    content: attr(data-label);
+    font-size: 12.5px;
+    line-height: 1.6;
+    letter-spacing: .04em;
+    color: var(--muted);
+  }
+  .table.stack-table td.ta-c,
+  .table.stack-table td.ta-r { text-align: left; }
+  /* 状态/平台等胶囊不随网格拉伸，保持内容宽度 */
+  .table.stack-table td > .chip,
+  .table.stack-table td > .pill,
+  .table.stack-table td > .badge { justify-self: start; }
+  .table.stack-table td.msg-cell,
+  .table.stack-table td.cell-result { white-space: normal; }
+  /* 仪表盘时间列在桌面是 nowrap；堆叠态改为可换行，避免撑出卡片 */
+  .table.stack-table .time-cell { white-space: normal; }
+  .table.fixed.stack-table td:last-child { padding-left: 14px; padding-right: 14px; }
+  .table.stack-table .recent-msg-inner { white-space: normal; text-overflow: clip; }
+  .table.fixed.stack-table td.col-actions {
+    display: block;
+    width: 100%;
+    white-space: normal;
+    text-align: left;
+  }
+  .table.stack-table td.col-actions::before { display: block; margin-bottom: 6px; }
+  .table.stack-table td.col-actions .op-group {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .table.stack-table .chk { margin: 0; }
+  .table.stack-table tbody tr:hover td { background: transparent; }
+}
+
 @media (max-width: 420px) {
   .brand-word { font-size: 17px; }
   .nav { gap: 14px; }
@@ -1637,6 +1809,16 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; cursor: not-al
   .acc-avatar { width: 30px; height: 30px; font-size: 15px; }
   .acc-actions .btn { flex: 1 1 auto; }
   .notif-side { width: 100%; }
+}
+
+/* 320–360 最窄手机：进一步收紧导航间距与字号，6 项导航一屏放下（不再横向滚动）；
+   同时隐藏品牌文字只留图标，让「品牌 + 工具」回到同一行，顶栏由三行降为两行。 */
+@media (max-width: 360px) {
+  .topbar-inner { padding-left: 12px; padding-right: 12px; }
+  .brand-word { display: none; }
+  .nav { gap: 6px; }
+  .nav a { font-size: 13px; letter-spacing: 0; }
+  .nav a:has(.badge) { padding-right: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

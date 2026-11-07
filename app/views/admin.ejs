@@ -64,7 +64,7 @@
   <div class="card">
     <h2 class="card-title">用户管理（<%= users.length %>）</h2>
     <div class="table-wrap">
-    <table class="table fixed users-table">
+    <table class="table fixed users-table stack-table">
       <colgroup>
         <col class="col-name">
         <col class="col-role">
@@ -76,11 +76,11 @@
       <tbody>
         <% users.forEach(u => { %>
         <tr>
-          <td class="ta-l"><%= u.username %></td>
-          <td class="ta-c"><%= u.is_admin ? '管理员' : '用户' %></td>
-          <td class="ta-c"><%= u.account_count %></td>
-          <td class="ta-c"><span class="chip <%= u.status === 'active' ? 'ok' : 'warn' %>"><%= u.status === 'active' ? '正常' : '已禁用' %></span></td>
-          <td class="col-actions">
+          <td class="ta-l" data-label="用户名"><%= u.username %></td>
+          <td class="ta-c" data-label="角色"><%= u.is_admin ? '管理员' : '用户' %></td>
+          <td class="ta-c" data-label="账号数"><%= u.account_count %></td>
+          <td class="ta-c" data-label="状态"><span class="chip <%= u.status === 'active' ? 'ok' : 'warn' %>"><%= u.status === 'active' ? '正常' : '已禁用' %></span></td>
+          <td class="col-actions" data-label="操作">
             <div class="op-group">
               <% if (u.status === 'active') { %>
               <form class="inline-form" method="post" action="/admin/users/<%= u.id %>/op">
@@ -126,7 +126,7 @@
     <p class="empty">暂无数据</p>
   <% } else { %>
   <div class="table-wrap">
-  <table class="table fixed accounts-table">
+  <table class="table fixed accounts-table stack-table">
     <colgroup>
       <col class="col-user">
       <col class="col-platform">
@@ -139,12 +139,12 @@
     <tbody>
       <% accounts.forEach(a => { %>
       <tr>
-        <td class="ta-l"><%= a.username || '-' %></td>
-        <td class="ta-c"><span class="pill"><%= a.platformName %></span></td>
-        <td class="ta-l"><%= a.name %></td>
-        <td class="ta-c"><span class="chip <%= a.status === 'active' ? 'ok' : (a.expired ? 'err' : 'warn') %>"><%= a.status === 'active' ? '活跃' : (a.status === 'expired' ? '已过期' : '已暂停') %></span></td>
-        <td class="ta-c"><%= a.checkin_time %></td>
-        <td class="muted nowrap ta-r"><%= a.expires_at || '-' %></td>
+        <td class="ta-l" data-label="归属用户"><%= a.username || '-' %></td>
+        <td class="ta-c" data-label="平台"><span class="pill"><%= a.platformName %></span></td>
+        <td class="ta-l" data-label="备注"><%= a.name %></td>
+        <td class="ta-c" data-label="状态"><span class="chip <%= a.status === 'active' ? 'ok' : (a.expired ? 'err' : 'warn') %>"><%= a.status === 'active' ? '活跃' : (a.status === 'expired' ? '已过期' : '已暂停') %></span></td>
+        <td class="ta-c" data-label="每日时间"><%= a.checkin_time %></td>
+        <td class="muted nowrap ta-r" data-label="到期时间"><%= a.expires_at || '-' %></td>
       </tr>
       <% }) %>
     </tbody>

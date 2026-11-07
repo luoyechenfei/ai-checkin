@@ -106,7 +106,7 @@
   <% } else { %>
   <form method="post" action="/admin/notifications/delete">
     <div class="head-actions" style="justify-content:space-between;margin-bottom:10px;">
-      <label class="muted small"><input type="checkbox" id="checkAllNotif"> 全选本页</label>
+      <label class="muted small chk-inline"><input type="checkbox" id="checkAllNotif"> 全选本页</label>
       <div class="head-actions">
         <span class="muted small">共 <%= total %> 条 · 每页 <%= perPage %> 条 · 第 <%= page %>/<%= pages %> 页</span>
         <button class="btn danger sm" type="submit"
@@ -114,7 +114,7 @@
       </div>
     </div>
     <div class="table-wrap">
-    <table class="table fixed notices-table">
+    <table class="table fixed notices-table stack-table">
       <colgroup>
         <col class="col-check">
         <col class="col-time">
@@ -128,17 +128,17 @@
       <tbody>
         <% notices.forEach(n => { %>
         <tr>
-          <td class="check-col"><input type="checkbox" name="ids" value="<%= n.id %>" class="row-check" aria-label="选择通知"></td>
-          <td class="muted nowrap ta-l"><%= n.created_at %></td>
-          <td class="ta-c"><%= n.username || ('#' + n.user_id) %></td>
-          <td class="ta-c">
+          <td class="check-col" data-label="选择"><label class="chk"><input type="checkbox" name="ids" value="<%= n.id %>" class="row-check" aria-label="选择通知"></label></td>
+          <td class="muted nowrap ta-l" data-label="时间"><%= n.created_at %></td>
+          <td class="ta-c" data-label="用户"><%= n.username || ('#' + n.user_id) %></td>
+          <td class="ta-c" data-label="类型">
             <span class="chip <%= n.type === 'session_expired' || n.level === 'err' ? 'err' : (n.type === 'checkin_failed' || n.level === 'warn' ? 'warn' : 'info') %>">
               <%= n.type === 'session_expired' ? '授权过期' : (n.type === 'checkin_failed' ? '签到失败' : (n.level === 'warn' ? '重要' : (n.level === 'err' ? '紧急' : '系统'))) %>
             </span>
           </td>
-          <td class="msg-cell ta-l"><%= n.title %></td>
-          <td class="muted nowrap ta-c"><%= n.is_read ? '已读' : '未读' %></td>
-          <td class="col-actions">
+          <td class="msg-cell ta-l" data-label="标题"><%= n.title %></td>
+          <td class="muted nowrap ta-c" data-label="状态"><%= n.is_read ? '已读' : '未读' %></td>
+          <td class="col-actions" data-label="操作">
             <button type="submit" class="btn danger sm" formaction="/admin/notifications/<%= n.id %>/delete"
                     onclick="return confirm('确定删除通知「<%= n.title %>」吗？')">删除</button>
           </td>
