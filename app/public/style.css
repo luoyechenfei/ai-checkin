@@ -786,7 +786,6 @@ code {
   min-width: 640px;
   font-variant-numeric: tabular-nums;
 }
-.table.compact { min-width: 0; }
 .table th {
   padding: 9px 12px;
   font-family: var(--sans);
@@ -806,12 +805,13 @@ code {
   padding: 12px 12px;
   border-bottom: 1px solid var(--rule);
   vertical-align: middle;
+  text-align: left;
 }
 /* 数值 / 时间 / 状态列：表头与数据同时右对齐 */
 .table th.ta-r, .table td.ta-r { text-align: right; }
 .table th.ta-c, .table td.ta-c { text-align: center; }
+/* 操作列只负责对齐与不换行，宽度交给固定布局的 colgroup */
 .table th.col-actions, .table td.col-actions {
-  width: 1%;
   text-align: right;
   white-space: nowrap;
 }
@@ -825,8 +825,35 @@ code {
 .table tbody tr:hover td { background: var(--accent-soft); }
 .table tbody tr:last-child td { border-bottom: 0; }
 .table input[type="checkbox"] { accent-color: var(--accent); }
-.check-col { width: 38px; }
-.msg-cell { word-break: break-word; }
+.check-col { width: 44px; }
+.msg-cell { word-break: break-word; overflow-wrap: anywhere; }
+
+/* ---------- 固定列宽表格 ----------
+   表头与首行 td 共用 colgroup 的列宽；table-layout: fixed 让列宽只由列定义决定，
+   不再被长消息 / 长账号名等内容撑开，避免不同数据下各列宽度漂移。
+   窄屏时表格保持 min-width，由 .table-wrap 内部横向滚动，不产生页面级溢出。 */
+.table.fixed { table-layout: fixed; min-width: 940px; }
+.table.fixed td { overflow-wrap: break-word; }
+.table.fixed .col-check { width: 44px; }
+.table.fixed .col-time { width: 180px; }
+.table.fixed .col-platform { width: 124px; }
+.table.fixed .col-account { width: 168px; }
+.table.fixed .col-user { width: 130px; }
+.table.fixed .col-role { width: 100px; }
+.table.fixed .col-count { width: 90px; }
+.table.fixed .col-status { width: 104px; }
+.table.fixed .col-type { width: 96px; }
+.table.fixed .col-points { width: 76px; }
+.table.fixed .col-result { width: 88px; }
+.table.fixed .col-ip { width: 132px; }
+.table.fixed .col-action-name { width: 132px; }
+.table.fixed .col-checkin-time { width: 100px; }
+.table.fixed .col-expires { width: 176px; }
+.table.fixed .col-actions { width: 96px; }
+.table.fixed.users-table { min-width: 784px; }
+.table.fixed.users-table .col-name { width: 260px; }
+.table.fixed.users-table .col-actions { width: 230px; }
+.table.fixed.accounts-table { min-width: 820px; }
 
 .bulk-bar {
   display: flex;
@@ -1376,10 +1403,11 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; cursor: not-al
 .card.narrow { max-width: none; }
 /* 管理页设置表单限定可读宽度，字段与保存按钮左对齐 */
 .mid-page .card.narrow .form { max-width: 760px; }
-/* 仪表盘记录表：固定列宽，时间靠右、平台占中、结果贴右 */
-.dashboard .table.compact { table-layout: fixed; }
-.dashboard .table.compact th:nth-child(1) { width: 190px; }
-.dashboard .table.compact th:nth-child(3) { width: 46%; }
+/* 仪表盘记录表：三列固定布局，时间右对齐、平台与结果左对齐 */
+.dashboard .table.fixed.recent-table { min-width: 460px; }
+.dashboard .table.fixed .col-time { width: 190px; }
+.dashboard .table.fixed .col-platform { width: 130px; }
+.dashboard .table .time-cell { white-space: nowrap; }
 
 /* ---------- 空状态 ---------- */
 .empty {
@@ -1482,7 +1510,6 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; cursor: not-al
   .btn.sm { min-height: 34px; padding: 6px 12px; }
   .theme-seg-btn { width: 34px; height: 30px; }
   .theme-seg-btn svg { width: 16px; height: 16px; }
-  .table.compact th, .table.compact td { text-align: left; }
   .field-row { grid-template-columns: 1fr; }
   .cred-fields, .subform { min-width: 0; }
   .list li { flex-direction: column; align-items: flex-start; gap: 3px; }
@@ -1512,16 +1539,6 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; cursor: not-al
 
   .admin-nav { gap: 20px; overflow-x: auto; flex-wrap: nowrap; }
   .admin-nav .btn { white-space: nowrap; }
-
-  /* 仪表盘紧凑表格 → 账目行堆叠 */
-  .table.compact { display: block; min-width: 0; }
-  .table.compact thead { display: none; }
-  .table.compact tbody, .table.compact tr, .table.compact td { display: block; width: auto; }
-  .table.compact tr { padding: 10px 2px; border-bottom: 1px dashed var(--rule); }
-  .table.compact tr:last-child { border-bottom: 0; }
-  .table.compact td { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 2px 0; border: none; }
-  .table.compact td:first-child { padding-left: 2px; }
-  .table.compact tr:hover td { background: transparent; }
 
   .footer,
   .wide-page .footer,

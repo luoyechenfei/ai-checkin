@@ -50,7 +50,16 @@
               onclick="return confirm('确定删除选中的操作日志吗？')">批量删除</button>
     </div>
     <div class="table-wrap">
-    <table class="table">
+    <table class="table fixed">
+      <colgroup>
+        <col class="col-check">
+        <col class="col-time">
+        <col class="col-user">
+        <col class="col-action-name">
+        <col class="col-detail">
+        <col class="col-ip">
+        <col class="col-actions">
+      </colgroup>
       <thead><tr><th class="check-col"></th><th class="ta-r">时间</th><th>用户</th><th>操作</th><th>详情</th><th>IP</th><th class="col-actions">操作</th></tr></thead>
       <tbody>
         <% rows.forEach(r => { %>

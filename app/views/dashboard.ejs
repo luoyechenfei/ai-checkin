@@ -42,20 +42,27 @@
     <% if (recentLogs.length === 0) { %>
       <p class="empty">暂无签到记录</p>
     <% } else { %>
-      <table class="table compact">
-        <thead><tr><th class="ta-r">时间</th><th>平台</th><th class="ta-r">结果</th></tr></thead>
+      <div class="table-wrap">
+      <table class="table fixed recent-table">
+        <colgroup>
+          <col class="col-time">
+          <col class="col-platform">
+          <col>
+        </colgroup>
+        <thead><tr><th class="ta-r">时间</th><th>平台</th><th>结果</th></tr></thead>
         <tbody>
           <% recentLogs.forEach(l => { %>
           <tr>
-            <td class="muted nowrap ta-r"><%= l.created_at %></td>
+            <td class="muted time-cell ta-r"><%= l.created_at %></td>
             <td><span class="pill"><%= l.platformName %></span></td>
-            <td class="ta-r"><span class="chip <%= l.success ? 'ok' : 'err' %>"><%= l.success ? '成功' : '失败' %></span>
+            <td class="result-cell"><span class="chip <%= l.success ? 'ok' : 'err' %>"><%= l.success ? '成功' : '失败' %></span>
               <% if (l.points > 0) { %><span class="chip ok">+<%= l.points %></span><% } %>
               <span class="muted small"><%= (l.message || '').slice(0, 40) %></span></td>
           </tr>
           <% }) %>
         </tbody>
       </table>
+      </div>
     <% } %>
   </div>
 </div>

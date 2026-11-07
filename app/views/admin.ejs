@@ -64,7 +64,14 @@
   <div class="card">
     <h2 class="card-title">用户管理（<%= users.length %>）</h2>
     <div class="table-wrap">
-    <table class="table">
+    <table class="table fixed users-table">
+      <colgroup>
+        <col class="col-name">
+        <col class="col-role">
+        <col class="col-count">
+        <col class="col-status">
+        <col class="col-actions">
+      </colgroup>
       <thead><tr><th>用户名</th><th>角色</th><th class="ta-r">账号数</th><th>状态</th><th class="col-actions">操作</th></tr></thead>
       <tbody>
         <% users.forEach(u => { %>
@@ -119,7 +126,15 @@
     <p class="empty">暂无数据</p>
   <% } else { %>
   <div class="table-wrap">
-  <table class="table">
+  <table class="table fixed accounts-table">
+    <colgroup>
+      <col class="col-user">
+      <col class="col-platform">
+      <col class="col-note">
+      <col class="col-status">
+      <col class="col-checkin-time">
+      <col class="col-expires">
+    </colgroup>
     <thead><tr><th>归属用户</th><th>平台</th><th>备注</th><th>状态</th><th class="ta-r">每日时间</th><th class="ta-r">到期时间</th></tr></thead>
     <tbody>
       <% accounts.forEach(a => { %>
