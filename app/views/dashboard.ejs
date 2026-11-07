@@ -47,17 +47,22 @@
         <colgroup>
           <col class="col-time">
           <col class="col-platform">
-          <col>
+          <col class="col-result">
+          <col class="col-msg">
         </colgroup>
-        <thead><tr><th class="ta-r">时间</th><th>平台</th><th>结果</th></tr></thead>
+        <thead><tr><th class="ta-l">时间</th><th class="ta-c">平台</th><th class="ta-c">结果</th><th class="ta-c">消息</th></tr></thead>
         <tbody>
           <% recentLogs.forEach(l => { %>
           <tr>
-            <td class="muted time-cell ta-r"><%= l.created_at %></td>
-            <td><span class="pill"><%= l.platformName %></span></td>
-            <td class="result-cell"><span class="chip <%= l.success ? 'ok' : 'err' %>"><%= l.success ? '成功' : '失败' %></span>
-              <% if (l.points > 0) { %><span class="chip ok">+<%= l.points %></span><% } %>
-              <span class="muted small"><%= (l.message || '').slice(0, 40) %></span></td>
+            <td class="muted time-cell ta-l"><%= l.created_at %></td>
+            <td class="ta-c"><span class="pill"><%= l.platformName %></span></td>
+            <td class="result-cell ta-c">
+              <div class="result-inner">
+                <span class="chip <%= l.success ? 'ok' : 'err' %>"><%= l.success ? '成功' : '失败' %></span>
+                <% if (l.points > 0) { %><span class="chip ok">+<%= l.points %></span><% } %>
+              </div>
+            </td>
+            <td class="muted small recent-msg ta-l"><span class="recent-msg-inner"><%= (l.message || '').slice(0, 40) %></span></td>
           </tr>
           <% }) %>
         </tbody>

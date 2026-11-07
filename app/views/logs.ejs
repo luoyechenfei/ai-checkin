@@ -30,7 +30,7 @@
               onclick="return confirm('确定删除选中的签到记录吗？删除后不可恢复。')">批量删除</button>
     </div>
     <div class="table-wrap">
-    <table class="table fixed">
+    <table class="table fixed logs-table">
       <colgroup>
         <col class="col-check">
         <col class="col-time">
@@ -41,17 +41,17 @@
         <col class="col-message">
         <col class="col-actions">
       </colgroup>
-      <thead><tr><th class="check-col"></th><th class="ta-r">时间</th><th>平台</th><th>账号</th><th>结果</th><th class="ta-r">积分</th><th>消息</th><th class="col-actions">操作</th></tr></thead>
+      <thead><tr><th class="check-col"></th><th class="ta-l">时间</th><th class="ta-c">平台</th><th class="ta-c">账号</th><th class="ta-c">结果</th><th class="ta-c">积分</th><th class="ta-l">消息</th><th class="col-actions">操作</th></tr></thead>
       <tbody>
         <% logs.forEach(l => { %>
         <tr>
           <td class="check-col"><input type="checkbox" name="ids" value="<%= l.id %>" class="row-check" aria-label="选择记录"></td>
-          <td class="muted nowrap ta-r"><%= l.created_at %></td>
-          <td><span class="pill"><%= l.platformName %></span></td>
-          <td><%= l.account_name || '-' %></td>
-          <td><span class="chip <%= l.success ? 'ok' : 'err' %>"><%= l.success ? '成功' : '失败' %></span></td>
-          <td class="nowrap ta-r"><%= l.points > 0 ? '+' + l.points : (l.success ? '0' : '-') %></td>
-          <td class="msg-cell"><%= l.message || '' %></td>
+          <td class="muted nowrap ta-l"><%= l.created_at %></td>
+          <td class="ta-c"><span class="pill"><%= l.platformName %></span></td>
+          <td class="ta-c"><%= l.account_name || '-' %></td>
+          <td class="cell-result ta-c"><span class="chip <%= l.success ? 'ok' : 'err' %>"><%= l.success ? '成功' : '失败' %></span></td>
+          <td class="nowrap ta-c"><%= l.points > 0 ? '+' + l.points : (l.success ? '0' : '-') %></td>
+          <td class="msg-cell ta-l"><%= l.message || '' %></td>
           <td class="col-actions">
             <button type="submit" class="btn danger sm" formaction="/logs/<%= l.id %>/delete"
                     onclick="return confirm('确定删除这条记录吗？')">删除</button>

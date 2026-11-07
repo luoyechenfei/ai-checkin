@@ -114,7 +114,7 @@
       </div>
     </div>
     <div class="table-wrap">
-    <table class="table fixed">
+    <table class="table fixed notices-table">
       <colgroup>
         <col class="col-check">
         <col class="col-time">
@@ -124,20 +124,20 @@
         <col class="col-status">
         <col class="col-actions">
       </colgroup>
-      <thead><tr><th class="check-col"></th><th class="ta-r">时间</th><th>用户</th><th>类型</th><th>标题</th><th>状态</th><th class="col-actions">操作</th></tr></thead>
+      <thead><tr><th class="check-col"></th><th class="ta-l">时间</th><th class="ta-c">用户</th><th class="ta-c">类型</th><th class="ta-l">标题</th><th class="ta-c">状态</th><th class="col-actions">操作</th></tr></thead>
       <tbody>
         <% notices.forEach(n => { %>
         <tr>
           <td class="check-col"><input type="checkbox" name="ids" value="<%= n.id %>" class="row-check" aria-label="选择通知"></td>
-          <td class="muted nowrap ta-r"><%= n.created_at %></td>
-          <td><%= n.username || ('#' + n.user_id) %></td>
-          <td>
+          <td class="muted nowrap ta-l"><%= n.created_at %></td>
+          <td class="ta-c"><%= n.username || ('#' + n.user_id) %></td>
+          <td class="ta-c">
             <span class="chip <%= n.type === 'session_expired' || n.level === 'err' ? 'err' : (n.type === 'checkin_failed' || n.level === 'warn' ? 'warn' : 'info') %>">
               <%= n.type === 'session_expired' ? '授权过期' : (n.type === 'checkin_failed' ? '签到失败' : (n.level === 'warn' ? '重要' : (n.level === 'err' ? '紧急' : '系统'))) %>
             </span>
           </td>
-          <td class="msg-cell"><%= n.title %></td>
-          <td class="muted nowrap"><%= n.is_read ? '已读' : '未读' %></td>
+          <td class="msg-cell ta-l"><%= n.title %></td>
+          <td class="muted nowrap ta-c"><%= n.is_read ? '已读' : '未读' %></td>
           <td class="col-actions">
             <button type="submit" class="btn danger sm" formaction="/admin/notifications/<%= n.id %>/delete"
                     onclick="return confirm('确定删除通知「<%= n.title %>」吗？')">删除</button>

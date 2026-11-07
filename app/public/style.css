@@ -550,11 +550,6 @@ code {
 }
 .dashboard .card-title::before { display: none; }
 
-.dashboard .table th {
-  background: transparent;
-  border-bottom: 1px solid var(--rule-strong);
-  font-size: 12.5px;
-}
 .dashboard .table td { padding: 10px 12px; }
 .dashboard .table tbody tr:hover td { background: var(--sheet-2); }
 .dashboard .list li { border-bottom: 1px solid var(--rule); }
@@ -807,10 +802,21 @@ code {
   vertical-align: middle;
   text-align: left;
 }
-/* 数值 / 时间 / 状态列：表头与数据同时右对齐 */
+/* 表头与数据列共用同一对齐 class，表头不再全局居中：
+   .ta-l 左对齐（每张表的第一列，或需要折行的长文本列），
+   .ta-c 居中（中间列，表头与数据同为中心），
+   .ta-r 右对齐（每张表最后一列：操作 / 到期时间 / 仪表盘结果），
+   勾选列自身左对齐，表头为空。 */
 .table th.ta-r, .table td.ta-r { text-align: right; }
+.table th.ta-l, .table td.ta-l { text-align: left; }
 .table th.ta-c, .table td.ta-c { text-align: center; }
-/* 操作列只负责对齐与不换行，宽度交给固定布局的 colgroup */
+/* 结果列：单个 chip 在列内居中，和表头共用同一条中轴；
+   多个 chip 之间固定 8px（仅签到记录结果列可能出现）。 */
+.table td.cell-result {
+  text-align: center;
+  white-space: nowrap;
+}
+.table td.cell-result .chip + .chip { margin-left: 8px; }
 .table th.col-actions, .table td.col-actions {
   text-align: right;
   white-space: nowrap;
@@ -825,47 +831,96 @@ code {
 .table tbody tr:hover td { background: var(--accent-soft); }
 .table tbody tr:last-child td { border-bottom: 0; }
 .table input[type="checkbox"] { accent-color: var(--accent); }
-.check-col { width: 44px; }
 .msg-cell { word-break: break-word; overflow-wrap: anywhere; }
 
-/* ---------- 固定列宽表格 ----------
-   表头与首行 td 共用 colgroup 的列宽；table-layout: fixed 让列宽只由列定义决定，
-   不再被长消息 / 长账号名等内容撑开，避免不同数据下各列宽度漂移。
-   窄屏时表格保持 min-width，由 .table-wrap 内部横向滚动，不产生页面级溢出。 */
-.table.fixed { table-layout: fixed; min-width: 940px; }
+/* ---------- 表格列宽（按比例铺满容器，全站统一规范） ----------
+   1. table-layout: fixed 保留；每张表用一组百分比列宽，合计 100%，表格宽度恒等于容器内容宽度，
+      右侧不再保留空列，也不会出现“定宽列 + 大片留白”的结构。
+   2. 同类列在不同表中保持相近比例：时间 16–17.5%、平台 10–16%、账号 13%、结果 9–20%、积分 8%、
+      操作 13–28%（用户管理按钮组更宽，单独 28%）。
+   3. 最大份额给长文本列：签到消息 27%、日志详情 27%、通知标题 32%、账号备注 27%、用户名 26%。
+   4. min-width 只做窄屏兜底：列不被压扁，滚动发生在 .table-wrap 内，页面无横向溢出。
+   5. 对齐规则：每张表第一列（时间 / 用户名 / 归属用户）左对齐；中间列 th/td 同用 .ta-c 居中；
+      最后一列（操作 / 到期时间）右对齐，内容贴齐表格内容右缘；
+      需要折行的长文本列（消息 / 详情 / 标题 / 备注）保持左对齐（表头同向左对齐），避免居中折行产生锯齿；
+      仪表盘四列表按 时间左 / 平台居中 / 结果居中 / 消息左 处理，末列即长文本例外。
+      勾选列自身左对齐，表头为空。表头底色、字号、字重、内边距保持全站一致。 */
+.table.fixed {
+  table-layout: fixed;
+  min-width: 1080px;
+}
 .table.fixed td { overflow-wrap: break-word; }
-.table.fixed .col-check { width: 44px; }
-.table.fixed .col-time { width: 180px; }
-.table.fixed .col-platform { width: 124px; }
-.table.fixed .col-account { width: 168px; }
-.table.fixed .col-user { width: 130px; }
-.table.fixed .col-role { width: 100px; }
-.table.fixed .col-count { width: 90px; }
-.table.fixed .col-status { width: 104px; }
-.table.fixed .col-type { width: 96px; }
-.table.fixed .col-points { width: 76px; }
-.table.fixed .col-result { width: 88px; }
-.table.fixed .col-ip { width: 132px; }
-.table.fixed .col-action-name { width: 132px; }
-.table.fixed .col-checkin-time { width: 100px; }
-.table.fixed .col-expires { width: 176px; }
-.table.fixed .col-actions { width: 96px; }
-.table.fixed.users-table { min-width: 784px; }
-.table.fixed.users-table .col-name { width: 260px; }
-.table.fixed.users-table .col-actions { width: 230px; }
-.table.fixed.accounts-table { min-width: 820px; }
 
+/* 签到记录（8 列）：4 + 17 + 10 + 13 + 9 + 8 + 26 + 13 = 100%
+   时间列 17%：19 位时间戳 nowrap 实宽 147.8px，1080 兜底宽度下 17% 才有 159.6px 内容区，
+   左对齐后右侧仍留 ~12px 余量；16% 在兜底宽度只剩 148.8px，几乎贴住相邻列。 */
+.table.fixed.logs-table .col-check { width: 4%; }
+.table.fixed.logs-table .col-time { width: 17%; }
+.table.fixed.logs-table .col-platform { width: 10%; }
+.table.fixed.logs-table .col-account { width: 13%; }
+.table.fixed.logs-table .col-result { width: 9%; }
+.table.fixed.logs-table .col-points { width: 8%; }
+.table.fixed.logs-table .col-message { width: 26%; }
+.table.fixed.logs-table .col-actions { width: 13%; }
+
+/* 操作日志（7 列）：4.5 + 17.5 + 13 + 13 + 27 + 12 + 13 = 100%
+   时间列 17.5%：19 位时间戳 nowrap 实宽 147.8px，1026 宽容器下内容区 155.6px，
+   左对齐后右侧留 ~8px，不与「用户」列贴住；1020 兜底宽度下仍有 150.6px，不会换行。 */
+.table.fixed.audit-table { min-width: 1020px; }
+.table.fixed.audit-table .col-check { width: 4.5%; }
+.table.fixed.audit-table .col-time { width: 17.5%; }
+.table.fixed.audit-table .col-user { width: 13%; }
+.table.fixed.audit-table .col-action-name { width: 13%; }
+.table.fixed.audit-table .col-detail { width: 27%; }
+.table.fixed.audit-table .col-ip { width: 12%; }
+.table.fixed.audit-table .col-actions { width: 13%; }
+
+/* 系统通知（7 列）：4.5 + 17.5 + 13 + 10 + 32 + 10 + 13 = 100% */
+.table.fixed.notices-table { min-width: 1020px; }
+.table.fixed.notices-table .col-check { width: 4.5%; }
+.table.fixed.notices-table .col-time { width: 17.5%; }
+.table.fixed.notices-table .col-user { width: 13%; }
+.table.fixed.notices-table .col-type { width: 10%; }
+.table.fixed.notices-table .col-title { width: 32%; }
+.table.fixed.notices-table .col-status { width: 10%; }
+.table.fixed.notices-table .col-actions { width: 13%; }
+
+/* 用户管理（5 列）：24 + 18 + 10 + 18 + 30 = 100%
+   用户名从 38% 收窄到 24%：1026 容器下 246.2px、1000 兜底宽度下 240px，
+   12 字符用户名（luoyechenfei 实测约 91px）不换行；释放的 14% 中 12% 让给
+   角色 / 账号数 / 状态（三者整体左移 92–123px），2% 让给操作列。 */
+.table.fixed.users-table { min-width: 1000px; }
+.table.fixed.users-table .col-name { width: 24%; }
+.table.fixed.users-table .col-role { width: 18%; }
+.table.fixed.users-table .col-count { width: 10%; }
+.table.fixed.users-table .col-status { width: 18%; }
+.table.fixed.users-table .col-actions { width: 30%; }
+
+/* 平台账号（6 列）：20 + 12 + 27 + 11 + 10 + 20 = 100%
+   到期时间 20%：19 位时间戳 nowrap 实宽 147.8px，960 兜底宽度下内容区 160px；
+   18% 时 960 兜底只剩 140.8px，右对齐会把文字挤进内边距。 */
+.table.fixed.accounts-table { min-width: 960px; }
+.table.fixed.accounts-table .col-user { width: 20%; }
+.table.fixed.accounts-table .col-platform { width: 12%; }
+.table.fixed.accounts-table .col-note { width: 27%; }
+.table.fixed.accounts-table .col-status { width: 11%; }
+.table.fixed.accounts-table .col-checkin-time { width: 10%; }
+.table.fixed.accounts-table .col-expires { width: 20%; }
+
+/* 批量操作条与卡片内容同宽：横向不留内边距，右端按钮的右缘正好落在卡片内容右缘
+   （即卡片内边距线，距卡片边框 22px / 窄屏 16px），完整显示且不会被卡片裁切。
+   按钮 flex 不收缩，避免在窄屏换行时被压缩或溢出。 */
 .bulk-bar {
   display: flex;
   align-items: center;
   gap: 14px;
   flex-wrap: wrap;
-  padding: 11px 14px;
+  padding: 11px 0;
   margin-bottom: 0;
   background: var(--sheet-2);
   border-bottom: 1px solid var(--rule-strong);
 }
-.bulk-bar .btn { margin-left: auto; }
+.bulk-bar .btn { margin-left: auto; flex: 0 0 auto; }
 .pager {
   display: flex;
   align-items: center;
@@ -1403,11 +1458,37 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; cursor: not-al
 .card.narrow { max-width: none; }
 /* 管理页设置表单限定可读宽度，字段与保存按钮左对齐 */
 .mid-page .card.narrow .form { max-width: 760px; }
-/* 仪表盘记录表：三列固定布局，时间右对齐、平台与结果左对齐 */
-.dashboard .table.fixed.recent-table { min-width: 460px; }
-.dashboard .table.fixed .col-time { width: 190px; }
-.dashboard .table.fixed .col-platform { width: 130px; }
+/* 仪表盘记录表（4 列）：时间 / 平台 / 结果 / 消息 各 25%（合计 100），铺满整行、右侧不留空列；
+   时间首列左对齐（时间戳固定 19 位），平台与结果居中（结果列只放 chip + 积分，整体居中、chip 间距固定 8px），
+   消息列数据左对齐（表头按用户要求保持居中，见下方 .recent-msg）。 */
+.table.fixed.recent-table { min-width: 720px; }
+.table.fixed.recent-table .col-time { width: 25%; }
+.table.fixed.recent-table .col-platform { width: 25%; }
+.table.fixed.recent-table .col-result { width: 25%; }
+.table.fixed.recent-table .col-msg { width: 25%; }
+/* 末列默认左 12 / 右 16 的内边距会让内容区中心比列中心偏左 2px；
+   消息列补到左右各 16：表头「消息」仍居中且轴线与列中心重合，数据左缘与首列同样从 16px 起排。 */
+.table.fixed.recent-table th:last-child,
+.table.fixed.recent-table td:last-child { padding-left: 16px; }
 .dashboard .table .time-cell { white-space: nowrap; }
+.dashboard .table .result-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+.dashboard .table .result-inner .chip { flex: 0 0 auto; }
+/* 消息列数据由外层 td 左对齐（表头「消息」按用户要求单独保持居中）；
+   内层 span 撑满内容区，短文本从左侧起排，超长时右端省略、行高不变。 */
+.dashboard .table .recent-msg { text-align: left; }
+.dashboard .table .recent-msg-inner {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ---------- 空状态 ---------- */
 .empty {
@@ -1466,6 +1547,8 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; cursor: not-al
   .grid-2, .dashboard .grid-2 { grid-template-columns: 1fr; }
   .auth-wrap { grid-template-columns: 1fr 360px; }
   .auth-mast { min-height: 480px; }
+  /* 仪表盘四列在窄屏下仍等分 25%；min-width 720px 时每列 180px，
+     内容区 152px ≥ 19 位时间戳实宽 147.8px，时间戳与 chip 均不换行。 */
 }
 
 @media (max-width: 720px) {
@@ -1530,7 +1613,7 @@ input:disabled, select:disabled, textarea:disabled { opacity: .6; cursor: not-al
   .filter-form .btn { flex: 0 0 auto; }
   .head-actions { width: 100%; }
 
-  .bulk-bar { gap: 8px 12px; padding: 10px 12px; }
+  .bulk-bar { gap: 8px 12px; padding: 10px 0; }
   .bulk-bar .btn { margin-left: 0; }
   .pager { flex-wrap: wrap; gap: 10px; }
 
